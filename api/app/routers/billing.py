@@ -14,17 +14,17 @@ import logging
 import json
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/billing", tags=["billing"])
+router = APIRouter(tags=["billing"])
 stripe.api_key = settings.stripe_secret_key
 
-@router.get("/plans", response_model=List[PlanResponse])
+@router.get("/billing/plans", response_model=List[PlanResponse])
 async def get_plans(db: Session = Depends(get_db)):
     """Fetch all available plans from the database."""
     plans = db.query(Plan).all()
     return plans
 
 
-@router.post("/checkout")
+@router.post("/billing/checkout")
 async def create_checkout(
     data: CheckoutRequest,
     current_user: User = Depends(get_current_user),
@@ -56,7 +56,7 @@ async def create_checkout(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/portal")
+@router.get("/billing/portal")
 async def billing_portal(
     current_user: User = Depends(get_current_user),
 ):

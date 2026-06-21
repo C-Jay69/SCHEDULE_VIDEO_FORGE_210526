@@ -173,8 +173,8 @@ def seed_system_settings(db):
         ("watermark_text", "VideoForge", "Text shown on free plan watermarks"),
         ("max_free_videos", "4", "Max videos for free plan per month"),
         ("maintenance_mode", "false", "Set to 'true' to block new jobs"),
-        ("ollama_model", "llama3.2", "Ollama model used for script generation"),
-        ("tts_voice", "en_US-lessac-medium", "Default TTS voice (Piper)"),
+        ("openai_model", "gpt-4o", "OpenAI model used for script generation"),
+        ("tts_voice", "alloy", "Default TTS voice (OpenAI)"),
     ]
     for key, value, description in defaults:
         existing = db.query(SystemSetting).filter(SystemSetting.key == key).first()

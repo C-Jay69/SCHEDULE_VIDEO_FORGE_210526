@@ -13,7 +13,7 @@ AI-powered video generation and social media autopublishing platform.
 | Auth | JWT (access + refresh tokens) |
 | Payments | Stripe Checkout + Billing Portal |
 | Storage | S3-compatible (MinIO for local dev) |
-| AI | Ollama (llama3.2 scripts), Piper TTS, faster-whisper, FFmpeg |
+| AI | OpenAI (GPT-4o scripts, TTS voices) |
 | Social | YouTube OAuth v2 auto-publish; Instagram/TikTok/X metadata export |
 
 ---
@@ -29,100 +29,62 @@ AI-powered video generation and social media autopublishing platform.
 
 ---
 
-## Step-by-Step Deployment Guide
+## Quick Start
 
-### 1. Clone & Configure Environment
+### 1. Clone & configure
 
 ```bash
-git clone <repository-url>
+git clone <repo>
 cd videoforge-mvp
 make setup        # copies .env.example → .env
 ```
 
-### 2. Configure Environment Variables
-
-Edit the `.env` file and set at minimum:
+Edit `.env` — at minimum set:
 
 ```dotenv
-# Required: Generate a secure random string (use: openssl rand -hex 32)
-SECRET_KEY=your_long_random_secret_key_here
-
-# Required: Stripe configuration (get from https://dashboard.stripe.com/test/apikeys)
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-
-# Required: Admin credentials
-ADMIN_EMAIL=admin@yourdomain.com
-ADMIN_PASSWORD=secure_admin_password
-
-# Optional but recommended: YouTube API (for auto-publishing)
-YOUTUBE_CLIENT_ID=your_youtube_client_id
-YOUTUBE_CLIENT_SECRET=your_youtube_client_secret
-
-# Optional: OpenRouter for fallback text generation (free models)
-# Get free key from https://openrouter.ai/keys
-OPENROUTER_API_KEY=sk-or-your_openrouter_key
+SECRET_KEY=<long-random-string>
+OPENAI_API_KEY=sk-...
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+ADMIN_EMAIL=you@yourdomain.com
+ADMIN_PASSWORD=supersecret
 ```
 
-### 3. Start All Services
+### 2. Start everything
 
 ```bash
-make up           # Builds and starts all Docker containers
-make migrate      # Applies database migrations
-make seed         # Creates admin user, plans, and system settings
+make up           # builds & starts all containers
+make migrate      # runs Alembic migrations
+make seed         # seeds plans, admin user, system settings
 ```
 
-### 4. Verify Deployment
+App is running at:
+- **Web** → http://localhost:3000
+- **API docs** → http://localhost:8000/docs
+- **API redoc** → http://localhost:8000/redoc
 
-The platform will be available at:
-- **Main Application** → http://localhost:3000
-- **API Documentation** → http://localhost:8000/docs
-- **Admin Panel** → http://localhost:3000/admin (login with credentials from .env)
+### 3. Connect Stripe (optional for payments)
 
-### 5. Optional Integrations
-
-#### Stripe Payments (Enable Subscription Features)
-1. Create products in Stripe Dashboard matching plan names:
-   - Scheduler ($15/month)
-   - Committed ($30/month) 
-   - Intense ($55/month)
+1. Create products in Stripe Dashboard matching plan names
 2. Add price IDs to `.env`:
    ```
-   STRIPE_PRICE_SCHEDULER_MONTHLY=price_from_stripe
-   STRIPE_PRICE_SCHEDULER_YEARLY=price_from_stripe
-   STRIPE_PRICE_COMMITTED_MONTHLY=price_from_stripe
-   STRIPE_PRICE_COMMITTED_YEARLY=price_from_stripe
-   STRIPE_PRICE_INTENSE_MONTHLY=price_from_stripe
-   STRIPE_PRICE_INTENSE_YEARLY=price_from_stripe
+   STRIPE_PRICE_SCHEDULER_MONTHLY=price_xxx
+   STRIPE_PRICE_SCHEDULER_YEARLY=price_xxx
+   STRIPE_PRICE_COMMITTED_MONTHLY=price_xxx
+   STRIPE_PRICE_COMMITTED_YEARLY=price_xxx
+   STRIPE_PRICE_INTENSE_MONTHLY=price_xxx
+   STRIPE_PRICE_INTENSE_YEARLY=price_xxx
    ```
-3. Configure webhook in Stripe Dashboard pointing to `https://yourdomain.com/api/webhooks/stripe`
+3. Set up Stripe webhook pointing to `https://yourdomain.com/api/webhooks/stripe`
+   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
 
-#### YouTube Auto-Publishing
-1. Create Google Cloud Project
+### 4. Connect YouTube (optional)
+
+1. Create a project in Google Cloud Console
 2. Enable YouTube Data API v3
-3. Create OAuth 2.0 credentials (Web Application)
-4. Set credentials in `.env` and add authorized redirect URI: `http://localhost:8000/api/oauth/youtube/callback`
-
-### 6. Managing Services
-
-```bash
-# View all logs
-make logs
-
-# View specific service logs
-make logs-web     # Frontend (Next.js)
-make logs-api     # Backend (FastAPI)  
-make logs-worker  # Video generation worker
-
-# Stop all services
-make down
-
-# Restart services
-make restart
-
-# Rebuild after code changes
-make up --build
-```
+3. Create OAuth 2.0 credentials → Web Application
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`
+5. Add `http://localhost:3000/api/auth/callback/youtube` to authorized redirect URIs
 
 ---
 
@@ -204,7 +166,7 @@ Browser → Next.js (3000) → /api/* proxy → FastAPI (8000)
                                                 ↓
                                         Celery Worker
                                                 ↓
-                                    Ollama/Piper/Whisper → FFmpeg → S3
+                                    OpenAI → FFmpeg → S3
                                                 ↓
                                     YouTube API / metadata export
 ```
@@ -227,12 +189,7 @@ See `.env.example` for full list. Key variables:
 | `SECRET_KEY` | JWT signing key — must be long & random |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | Redis connection string |
-| `OLLAMA_BASE_URL` | Ollama service URL (default: http://ollama:11434) |
-| `OLLAMA_MODEL` | Ollama model to use (default: llama3.2) |
-| `OPENROUTER_API_KEY` | Optional: OpenRouter API key for free model fallback |
-| `OPENROUTER_MODEL` | OpenRouter model (default: meta-llama/llama-3.1-8b-instruct:free) |
-| `PIPER_MODEL_PATH` | Path to Piper TTS model (default: /app/models/en_US-lessac-medium.onnx) |
-| `WHISPER_MODEL_SIZE` | Whisper model size (default: base) |
+| `OPENAI_API_KEY` | GPT-4o + TTS |
 | `STRIPE_SECRET_KEY` | Stripe payments |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification |
 | `AWS_ACCESS_KEY_ID` | S3/MinIO storage |

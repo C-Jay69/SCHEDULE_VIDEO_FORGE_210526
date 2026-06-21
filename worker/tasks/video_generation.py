@@ -107,15 +107,16 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
         duration_seconds = settings.get("duration_seconds", 60)
         add_watermark = (plan == "free")
 
-        # ── STEP 1: THE BRAIN (Text Generation) ──────────────────────────
+    # ── STEP 1: THE BRAIN (Text Generation) ──────────────────────────
         logger.info(f"[{video_id}] Phase 1: Generating script and metadata...")
         update_job_progress(db, job, "running", 5)
         update_video_status(db, video, "generating_script")
 
+        import asyncio
         # Get script
-        script = await text_orchestrator.generate_script(topic, tone, style, duration_seconds)
+        script = asyncio.run(text_orchestrator.generate_script(topic, tone, style, duration_seconds))
         # Get metadata (Title, Tags, etc)
-        metadata = await text_orchestrator.generate_metadata(topic)
+        metadata = asyncio.run(text_orchestrator.generate_metadata(topic))
 
         update_video_status(db, video, "generating_script", script=script)
         update_job_progress(db, job, "running", 20)
@@ -190,13 +191,14 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
             elif platform == "x": connector = XConnector(token)
 
             if connector:
-                publish_result = await publish_orchestrator.publish_video(
+                import asyncio
+                publish_result = asyncio.run(publish_orchestrator.publish_video(
                     platform=platform,
                     video_path=output_path,
                     title=metadata.get('title', topic),
                     description=metadata.get('description', ""),
                     tags=metadata.get('tags', [])
-                )
+                ))
 
                 if publish_result["status"] == "published":
                     logger.info(f"[{video_id}] 🎉 SUCCESS: Published to {platform}")
