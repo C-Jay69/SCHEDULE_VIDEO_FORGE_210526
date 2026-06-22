@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getMe, logout as apiLogout, type User } from "@/lib/auth";
+// Added 'login as apiLogin' to the imports below
+import { getMe, logout as apiLogout, login as apiLogin, type User } from "@/lib/auth";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -22,11 +23,19 @@ export function useAuth() {
     fetchUser();
   }, [fetchUser]);
 
+  // --- ADDED THIS LOGIN FUNCTION ---
+  const login = async (credentials: any) => {
+    const response = await apiLogin(credentials);
+    await fetchUser(); // Refresh user state after login
+    return response;
+  };
+
   const logout = async () => {
     await apiLogout().catch(() => {});
     setUser(null);
     window.location.href = "/login";
   };
 
-  return { user, loading, logout, refetch: fetchUser };
+  // Added 'login' to the return object below
+  return { user, loading, login, logout, refetch: fetchUser };
 }

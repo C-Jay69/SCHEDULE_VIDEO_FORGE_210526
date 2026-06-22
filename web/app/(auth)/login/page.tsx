@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
@@ -25,7 +24,7 @@ export default function LoginPage() {
     setError("")
     setLoading(true)
     try {
-      await login(email, password)
+      await login({ email, password })
       router.push(redirect)
     } catch (err: any) {
       setError(err.message || "Invalid email or password")
@@ -62,9 +61,9 @@ export default function LoginPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-xs text-violet-600 hover:underline">
+              <a href="/forgot-password" className="text-xs text-violet-600 hover:underline">
                 Forgot password?
-              </Link>
+              </a>
             </div>
             <Input
               id="password"
@@ -82,9 +81,9 @@ export default function LoginPage() {
           </Button>
           <p className="text-sm text-gray-500 text-center">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-violet-600 hover:underline font-medium">
+            <a href="/register" className="text-violet-600 hover:underline font-medium">
               Create one
-            </Link>
+            </a>
           </p>
         </CardFooter>
       </form>
