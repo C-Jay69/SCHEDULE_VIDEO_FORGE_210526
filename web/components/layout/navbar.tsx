@@ -69,8 +69,9 @@ export function Navbar() {
 
         <div className="p-4 border-t border-gray-800">
           <div className="mb-3 px-3">
-            <p className="text-sm font-medium text-white truncate">{user.name}</p>
-            <p className="text-xs text-gray-400 truncate">{user.email}</p>
+          <p className="text-sm font-medium text-white truncate">
+            {user.name || user.email?.split("@")[0] || "User"}
+         </p>  
           </div>
           <Button variant="ghost" className="w-full justify-start text-gray-400 hover:text-white" onClick={logout}>
             <LogOut className="h-4 w-4 mr-2" />
