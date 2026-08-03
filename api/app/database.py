@@ -27,12 +27,14 @@ _engine: Optional[Engine] = None
 
 def _build_engine() -> Engine:
     """Construct the SQLAlchemy Engine with the configured DATABASE_URL."""
-    return create_engine(
-        settings.database_url,
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
-    )
+    url = settings.database_url
+    kwargs: dict = {}
+    # Postgres-only pool kwargs — skip on SQLite so dev/test/alembic autogenerate
+    # can use an in-memory DB without crashes. The trade-off is that SQLite
+    # doesn't get pooling (it doesn't need it — it's local).
+    if not url.startswith("sqlite"):
+        kwargs.update(pool_pre_ping=True, pool_size=10, max_overflow=20)
+    return create_engine(url, **kwargs)
 
 
 def get_engine() -> Engine:
