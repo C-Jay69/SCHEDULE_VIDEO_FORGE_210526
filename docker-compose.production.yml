@@ -1,0 +1,156 @@
+# =============================================================================
+# VideoForge — production deployment compose file
+#
+# Differences from docker-compose.yml (which is dev-oriented):
+#   • No volume mounts of source code (build the images, push, deploy)
+#   • No --reload; the api image default CMD is production mode
+#   • Caddy handles TLS termination + reverse proxy + Let's Encrypt
+#   • MinIO is dropped — use real S3 (set AWS_* + S3_* env vars)
+#   • Ollama is dropped — use a managed LLM provider (OpenAI / OpenRouter)
+#
+# Required env (set in .env or via your secrets manager):
+#   PRIMARY_DOMAIN, API_DOMAIN, ACME_EMAIL
+#   SECRET_KEY, DATABASE_URL, REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+#   S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+#   OPENAI_API_KEY (or OPENROUTER_API_KEY)
+#   SENTRY_DSN (optional)
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml up -d --build
+#   docker compose -f docker-compose.production.yml logs -f
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      PRIMARY_DOMAIN: ${PRIMARY_DOMAIN:?PRIMARY_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+    networks: [videoforge]
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    image: videoforge/web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_APP_URL=https://${PRIMARY_DOMAIN}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      - NEXT_PUBLIC_API_URL=https://${API_DOMAIN:-api.${PRIMARY_DOMAIN}}
+      - NEXTAUTH_SECRET=${SECRET_KEY}
+      - API_URL=http://api:8000
+    networks: [videoforge]
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    image: videoforge/api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    # No DEV=1 in production — the image default CMD runs multi-worker uvicorn.
+    environment:
+      - WORKERS=${API_WORKERS:-4}
+      # Pull secrets from AWS Secrets Manager in prod. Override SECRETS_BACKEND
+      # to "env" if you're injecting via docker --env-file or k8s envFrom.
+      - SECRETS_BACKEND=${SECRETS_BACKEND:-aws}
+      - SECRETS_MANAGER_PREFIX=${SECRETS_MANAGER_PREFIX:-videoforge/prod/}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks: [videoforge]
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: videoforge/worker:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY:-4} -Q default,priority
+    environment:
+      - SECRETS_BACKEND=${SECRETS_BACKEND:-aws}
+      - SECRETS_MANAGER_PREFIX=${SECRETS_MANAGER_PREFIX:-videoforge/prod/}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      - api
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks: [videoforge]
+
+  beat:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: videoforge/worker:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - redis
+    networks: [videoforge]
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: videoforge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [videoforge]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [videoforge]
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  videoforge:
+    driver: bridge

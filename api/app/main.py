@@ -4,6 +4,12 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 
+from .core.secrets import populate_environ
+
+# Pull secrets from the configured backend BEFORE pydantic-settings reads env
+# vars. In dev (SECRETS_BACKEND unset) this is a no-op.
+populate_environ()
+
 from .config import settings
 from .database import engine, Base
 from .routers import auth, projects, videos, schedules, oauth, billing, admin

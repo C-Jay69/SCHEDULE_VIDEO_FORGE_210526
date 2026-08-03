@@ -1,0 +1,90 @@
+# =============================================================================
+# Caddy reverse proxy for VideoForge production
+#
+# Auto-issues and renews Let's Encrypt TLS certs for the domains listed below.
+# ACME challenge traffic (/.well-known/*) is handled by Caddy directly.
+# Everything else is forwarded to the api and web containers over the internal
+# Docker network.
+#
+# Set these env vars on the Caddy container (or pass via docker-compose):
+#   ACME_EMAIL        — email for Let's Encrypt registration (required for prod)
+#   PRIMARY_DOMAIN    — e.g. app.example.com
+#   API_DOMAIN        — e.g. api.example.com  (optional; if unset, api is
+#                       served at api.<PRIMARY_DOMAIN>)
+# =============================================================================
+
+# Global options
+{
+    email {$ACME_EMAIL}
+    # Production: use Let's Encrypt. For staging, replace with:
+    #   acme ca https://acme-staging-v02.api.letsencrypt.org/directory
+    admin off
+}
+
+# Main web app
+{$PRIMARY_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy web:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    @api path /api/*
+    handle @api {
+        reverse_proxy api:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Health probe (also exposed at /health on api directly)
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove Server header
+        -Server
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Optional: dedicated api subdomain
+{$API_DOMAIN:api.{$PRIMARY_DOMAIN}} {
+    encode zstd gzip
+    reverse_proxy api:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
