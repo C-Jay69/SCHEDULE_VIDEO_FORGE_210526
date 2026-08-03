@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     secret_key: str = secrets.token_urlsafe(32)
     app_url: str = "http://localhost:8000"
     next_public_app_url: str = "http://localhost:3000"
+    # Comma-separated extra origins for CORS in addition to app_url + localhost:3000
+    cors_allowed_origins: str = ""
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 

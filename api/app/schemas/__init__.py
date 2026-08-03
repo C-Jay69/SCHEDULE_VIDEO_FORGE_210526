@@ -7,7 +7,8 @@ from .schedule import ScheduleCreate, ScheduleResponse
 from .billing import CheckoutRequest, PlanResponse
 from .admin import (
     AdminMetrics, AdminUserResponse, AdminJobResponse,
-    SystemSettingResponse, SystemSettingUpdate, AdminUserUpdate
+    SystemSettingResponse, SystemSettingUpdate, AdminUserUpdate,
+    AuditLogResponse,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "CheckoutRequest", "PlanResponse",
     "AdminMetrics", "AdminUserResponse", "AdminJobResponse",
     "SystemSettingResponse", "SystemSettingUpdate", "AdminUserUpdate",
+    "AuditLogResponse",
 ]

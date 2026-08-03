@@ -1,116 +1,131 @@
 """
 Idempotent seed script — run after migrations.
-Creates: admin user, test user, plans (free/scheduler/committed/intense), system settings.
 
-Usage:
-    python seed.py
-    ADMIN_EMAIL=me@co.com ADMIN_PASSWORD=secret python seed.py
+Seeds: admin user, test user, plans (free/scheduler/committed/intense),
+default system settings.
+
+Runs either:
+- inside the api container: `python /seed.py`
+- on the host (from repo root): `python seed.py`
+Both add the appropriate path so the api models import correctly.
+
+Env vars:
+    DATABASE_URL       Postgres connection string
+    ADMIN_EMAIL        Admin email (default: admin@videoforge.local)
+    ADMIN_PASSWORD     Admin password (default: change-me-locally)
+    TEST_USER_EMAIL    Test user email
+    TEST_USER_PASSWORD Test user password
 """
 
 import os
 import sys
 from datetime import datetime, timezone
 
-# Allow importing api models
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "api"))
 
+def _bootstrap_path():
+    """Put the api package on sys.path no matter where this script is run."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    # Running inside the container: api code is at /app
+    if os.path.isdir(os.path.join(here, "app")):
+        sys.path.insert(0, here)
+    # Running from the host repo root: api code is at api/
+    elif os.path.isdir(os.path.join(here, "api", "app")):
+        sys.path.insert(0, os.path.join(here, "api"))
+    else:
+        # Last resort: assume cwd is the repo root and api/ is a sibling
+        sys.path.insert(0, os.path.join(os.getcwd(), "api"))
+
+
+_bootstrap_path()
+
+from dotenv import load_dotenv
+from passlib.context import CryptContext
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from passlib.context import CryptContext
-from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/videoforge")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@videoforge.io")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme123!")
-TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "test@videoforge.io")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://videoforge:videoforge_secret@postgres:5432/videoforge",
+)
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@videoforge.local")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change-me-locally")
+TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "test@videoforge.local")
 TEST_USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "testpass123!")
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-from api.models.user import User
-from api.models.plan import Plan
-from api.models.settings import SystemSetting
-from api.db import Base
+from app.models.user import User, UserRole  # noqa: E402
+from app.models.plan import Plan  # noqa: E402
+from app.models.system_settings import SystemSettings  # noqa: E402
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 
 
-def seed_plans(db):
-    plans = [
-        {
-            "name": "free",
-            "display_name": "Free",
-            "price_monthly_cents": 0,
-            "price_yearly_cents": 0,
-            "videos_per_month": 4,
-            "motion_credits": 0,
-            "posts_per_week": 1,
-            "auto_publish": False,
-            "watermark": True,
-            "hd_resolution": False,
-            "background_music": False,
-            "voice_cloning": False,
-            "edit_preview": False,
-            "stripe_price_id_monthly": None,
-            "stripe_price_id_yearly": None,
-        },
-        {
-            "name": "scheduler",
-            "display_name": "Scheduler",
-            "price_monthly_cents": 1500,
-            "price_yearly_cents": 1200,
-            "videos_per_month": 13,  # ~3/week
-            "motion_credits": 27,
-            "posts_per_week": 3,
-            "auto_publish": True,
-            "watermark": False,
-            "hd_resolution": True,
-            "background_music": True,
-            "voice_cloning": True,
-            "edit_preview": True,
-            "stripe_price_id_monthly": os.getenv("STRIPE_PRICE_SCHEDULER_MONTHLY"),
-            "stripe_price_id_yearly": os.getenv("STRIPE_PRICE_SCHEDULER_YEARLY"),
-        },
-        {
-            "name": "committed",
-            "display_name": "Committed",
-            "price_monthly_cents": 3000,
-            "price_yearly_cents": 2500,
-            "videos_per_month": 30,  # once/day
-            "motion_credits": 62,
-            "posts_per_week": 7,
-            "auto_publish": True,
-            "watermark": False,
-            "hd_resolution": True,
-            "background_music": True,
-            "voice_cloning": True,
-            "edit_preview": True,
-            "stripe_price_id_monthly": os.getenv("STRIPE_PRICE_COMMITTED_MONTHLY"),
-            "stripe_price_id_yearly": os.getenv("STRIPE_PRICE_COMMITTED_YEARLY"),
-        },
-        {
-            "name": "intense",
-            "display_name": "Intense",
-            "price_monthly_cents": 5500,
-            "price_yearly_cents": 4600,
-            "videos_per_month": 62,  # twice/day
-            "motion_credits": 124,
-            "posts_per_week": 14,
-            "auto_publish": True,
-            "watermark": False,
-            "hd_resolution": True,
-            "background_music": True,
-            "voice_cloning": True,
-            "edit_preview": True,
-            "stripe_price_id_monthly": os.getenv("STRIPE_PRICE_INTENSE_MONTHLY"),
-            "stripe_price_id_yearly": os.getenv("STRIPE_PRICE_INTENSE_YEARLY"),
-        },
-    ]
+# Plan definitions aligned with the Plan model schema.
+# Feature flags are stored in features_json; price is a single cents value.
+PLAN_DEFS = [
+    {
+        "name": "free",
+        "stripe_price_id": os.getenv("STRIPE_FREE_PRICE_ID"),
+        "video_limit_monthly": 4,
+        "storage_limit_gb": 1,
+        "motion_credits_monthly": 0,
+        "features_json": ["watermark"],
+        "price_cents": 0,
+        "is_active": True,
+    },
+    {
+        "name": "scheduler",
+        "stripe_price_id": os.getenv("STRIPE_SCHEDULER_PRICE_ID"),
+        "video_limit_monthly": 13,  # ~3/week
+        "storage_limit_gb": 10,
+        "motion_credits_monthly": 27,
+        "features_json": ["no_watermark", "auto_publish", "hd", "background_music"],
+        "price_cents": 1500,
+        "is_active": True,
+    },
+    {
+        "name": "committed",
+        "stripe_price_id": os.getenv("STRIPE_COMMITTED_PRICE_ID"),
+        "video_limit_monthly": 30,  # once/day
+        "storage_limit_gb": 50,
+        "motion_credits_monthly": 62,
+        "features_json": ["no_watermark", "auto_publish", "hd", "background_music", "voice_cloning"],
+        "price_cents": 3000,
+        "is_active": True,
+    },
+    {
+        "name": "intense",
+        "stripe_price_id": os.getenv("STRIPE_INTENSE_PRICE_ID"),
+        "video_limit_monthly": 62,  # twice/day
+        "storage_limit_gb": 200,
+        "motion_credits_monthly": 124,
+        "features_json": [
+            "no_watermark", "auto_publish", "hd", "background_music",
+            "voice_cloning", "priority_queue",
+        ],
+        "price_cents": 5500,
+        "is_active": True,
+    },
+]
 
-    for p in plans:
+
+SETTING_DEFAULTS = [
+    ("max_video_retries", "3"),
+    ("video_expiry_days", "30"),
+    ("watermark_text", "VideoForge"),
+    ("max_free_videos", "4"),
+    ("maintenance_mode", "false"),
+    ("openai_model", "gpt-4o"),
+    ("tts_voice", "alloy"),
+]
+
+
+def seed_plans(db):
+    for p in PLAN_DEFS:
         existing = db.query(Plan).filter(Plan.name == p["name"]).first()
         if existing:
             for k, v in p.items():
@@ -125,19 +140,16 @@ def seed_plans(db):
 def seed_admin(db):
     existing = db.query(User).filter(User.email == ADMIN_EMAIL).first()
     if existing:
-        existing.role = "admin"
+        existing.role = UserRole.admin
         existing.is_active = True
         print(f"  [UPDATE] admin: {ADMIN_EMAIL}")
     else:
-        plan = db.query(Plan).filter(Plan.name == "free").first()
         admin = User(
             email=ADMIN_EMAIL,
-            full_name="Admin",
-            hashed_password=pwd_ctx.hash(ADMIN_PASSWORD),
-            role="admin",
+            password_hash=pwd_ctx.hash(ADMIN_PASSWORD),
+            name="Admin",
+            role=UserRole.admin,
             is_active=True,
-            plan_id=plan.id if plan else None,
-            plan_name="free",
             created_at=datetime.now(timezone.utc),
         )
         db.add(admin)
@@ -150,15 +162,12 @@ def seed_test_user(db):
     if existing:
         print(f"  [SKIP] test user already exists: {TEST_USER_EMAIL}")
         return
-    plan = db.query(Plan).filter(Plan.name == "committed").first()
     user = User(
         email=TEST_USER_EMAIL,
-        full_name="Test User",
-        hashed_password=pwd_ctx.hash(TEST_USER_PASSWORD),
-        role="user",
+        password_hash=pwd_ctx.hash(TEST_USER_PASSWORD),
+        name="Test User",
+        role=UserRole.user,
         is_active=True,
-        plan_id=plan.id if plan else None,
-        plan_name="committed",
         created_at=datetime.now(timezone.utc),
     )
     db.add(user)
@@ -167,24 +176,14 @@ def seed_test_user(db):
 
 
 def seed_system_settings(db):
-    defaults = [
-        ("max_video_retries", "3", "Max Celery retries per video job"),
-        ("video_expiry_days", "30", "Days before video files are deleted"),
-        ("watermark_text", "VideoForge", "Text shown on free plan watermarks"),
-        ("max_free_videos", "4", "Max videos for free plan per month"),
-        ("maintenance_mode", "false", "Set to 'true' to block new jobs"),
-        ("openai_model", "gpt-4o", "OpenAI model used for script generation"),
-        ("tts_voice", "alloy", "Default TTS voice (OpenAI)"),
-    ]
-    for key, value, description in defaults:
-        existing = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    for key, value in SETTING_DEFAULTS:
+        existing = db.query(SystemSettings).filter(SystemSettings.key == key).first()
         if existing:
             print(f"  [SKIP] setting: {key}")
         else:
-            db.add(SystemSetting(
+            db.add(SystemSettings(
                 key=key,
                 value=value,
-                description=description,
                 updated_at=datetime.now(timezone.utc),
             ))
             print(f"  [CREATE] setting: {key}")

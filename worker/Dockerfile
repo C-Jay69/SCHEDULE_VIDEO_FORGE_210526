@@ -16,11 +16,14 @@ RUN apt-get update && apt-get install -y \
 COPY worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy worker code
+# Copy worker code (celery_app.py, db.py, tasks/, pipeline/) into /app
 COPY worker/ .
 
-# Copy api models (needed by worker)
-COPY api /api
+# Copy api/app/* into /app/app so worker code can do `from app.models import X`
+COPY api/app /app/app
+
+# Make /app importable as the package root
+ENV PYTHONPATH=/app
 
 # Download Whisper model on build (optional - can be done at runtime)
 ENV WHISPER_MODEL_SIZE=base

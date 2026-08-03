@@ -102,26 +102,21 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     logger.error(f"Webhook error: Plan {plan_name} not found in DB")
                     return {"status": "plan_not_found"}
 
-                # In our case, we'll use the plan name to map to PlanType
-                # Plan names in DB: "free", "scheduler", "daily", "hardcore"
-                # PlanType enum: free, creator, pro (we might need to align these)
-                # Let's attempt a simple mapping or use the name if compatible
-                
-                # Note: The user's current subscription needs updating.
+                # Map the seeded plan name to the legacy PlanType enum so
+                # Subscription rows stay compatible with the existing schema.
+                # Seeded plan names: free, scheduler, committed, intense
+                # PlanType enum: free, creator, pro
                 sub = (
                     db.query(Subscription)
                     .filter(Subscription.user_id == user.id)
                     .order_by(Subscription.created_at.desc())
                     .first()
                 )
-                
-                # Update/Create Subscription
-                # For now, we'll map 'scheduler'/'daily' to 'creator' and 'hardcore' to 'pro' 
-                # to match the previous subscription model structure.
-                if plan_name in ["scheduler", "daily"]:
-                    target_type = PlanType.creator
-                elif plan_name == "hardcore":
+
+                if plan_name == "intense":
                     target_type = PlanType.pro
+                elif plan_name in ("scheduler", "committed"):
+                    target_type = PlanType.creator
                 else:
                     target_type = PlanType.free
 

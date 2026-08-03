@@ -1,0 +1,3 @@
+Placeholder so the web/Dockerfile COPY of /app/public succeeds even when the
+project ships no static assets. Replace this file (and remove this comment)
+when you have actual public/ content to ship.

@@ -34,10 +34,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — defaults to next_public_app_url + localhost, plus anything in CORS_ALLOWED_ORIGINS
+# Dedupe so the same origin never appears twice.
+seen = set()
+cors_origins = []
+for origin in [settings.next_public_app_url, "http://localhost:3000"]:
+    if origin and origin not in seen:
+        cors_origins.append(origin)
+        seen.add(origin)
+if settings.cors_allowed_origins:
+    for o in (raw.strip() for raw in settings.cors_allowed_origins.split(",")):
+        if o and o not in seen:
+            cors_origins.append(o)
+            seen.add(o)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.next_public_app_url, "http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

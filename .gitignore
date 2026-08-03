@@ -3,6 +3,12 @@
 .env.local
 .env.*.local
 
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
 # Logs
 *.log
 npm-debug.log*

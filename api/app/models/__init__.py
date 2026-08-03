@@ -11,6 +11,6 @@ from .plan import Plan
 from .usage import UsageEvent
 from .project_asset import ProjectAsset
 from .prompt_template import PromptTemplate
-from .system_setting import SystemSetting
-from .audit import AdminAuditLog
+from .system_settings import SystemSettings
+from .admin_audit_log import AdminAuditLog
 

@@ -19,11 +19,14 @@ services:
 
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      # Local dev: enable --reload. Remove or set to 0 for production deploys.
+      - DEV=1
     depends_on:
       postgres:
         condition: service_healthy

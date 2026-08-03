@@ -56,7 +56,7 @@ model:
 
 # ── Seed ───────────────────────────────────────────────────────────────────────
 seed:
-	docker compose exec api python /app/../seed.py
+	docker compose exec api python /seed.py
 
 # ── Testing ────────────────────────────────────────────────────────────────────
 test:
