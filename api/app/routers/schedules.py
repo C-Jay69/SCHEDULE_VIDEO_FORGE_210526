@@ -5,7 +5,7 @@ from ..database import get_db
 from ..models.user import User
 from ..models.video import Video, VideoStatus
 from ..models.schedule import Schedule, ScheduleStatus, PlatformType
-from ..models.subscription import Subscription, PlanType
+from ..models.subscription import Subscription
 from ..schemas.schedule import ScheduleCreate, ScheduleResponse, ScheduleListResponse
 from ..core.security import get_current_user
 
@@ -35,7 +35,7 @@ async def create_schedule(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = sub.plan.value if sub else "free"
+    plan = sub.plan_name if sub else "free"
     if data.platform == "youtube" and plan == "free":
         raise HTTPException(
             status_code=402,

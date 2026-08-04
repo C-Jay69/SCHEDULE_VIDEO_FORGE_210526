@@ -6,7 +6,8 @@
       "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('docker-compose.yml'\\)\\)\")",
       "Bash(docker compose *)",
       "Bash(grep -E \"^\\\\.env$|venv|public|celery\")",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\); print\\('✓ CI YAML valid'\\)\")"
     ]
   }
 }

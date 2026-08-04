@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import stripe
 from ..database import get_db
 from ..models.user import User
-from ..models.subscription import Subscription, PlanType, SubscriptionStatus
+from ..models.subscription import Subscription, SubscriptionStatus
 from ..models.plan import Plan
 from ..schemas.billing import PlanResponse, CheckoutRequest, SubscriptionResponse
 from ..core.security import get_current_user
@@ -96,16 +96,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if user_id and plan_name:
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                # Find the plan in the DB to get the correct enum
+                # Find the Plan row to attach to this subscription via FK
                 db_plan = db.query(Plan).filter(Plan.name == plan_name).first()
                 if not db_plan:
                     logger.error(f"Webhook error: Plan {plan_name} not found in DB")
                     return {"status": "plan_not_found"}
 
-                # Map the seeded plan name to the legacy PlanType enum so
-                # Subscription rows stay compatible with the existing schema.
-                # Seeded plan names: free, scheduler, committed, intense
-                # PlanType enum: free, creator, pro
                 sub = (
                     db.query(Subscription)
                     .filter(Subscription.user_id == user.id)
@@ -113,21 +109,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     .first()
                 )
 
-                if plan_name == "intense":
-                    target_type = PlanType.pro
-                elif plan_name in ("scheduler", "committed"):
-                    target_type = PlanType.creator
-                else:
-                    target_type = PlanType.free
-
                 if sub:
-                    sub.plan = target_type
+                    sub.plan_id = db_plan.id
                     sub.status = SubscriptionStatus.active
                     sub.stripe_subscription_id = stripe_sub_id
                 else:
                     new_sub = Subscription(
                         user_id=user.id,
-                        plan=target_type,
+                        plan_id=db_plan.id,
                         status=SubscriptionStatus.active,
                         stripe_subscription_id=stripe_sub_id,
                     )

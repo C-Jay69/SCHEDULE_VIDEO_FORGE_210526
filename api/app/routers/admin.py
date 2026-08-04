@@ -80,7 +80,7 @@ async def list_users(
         )
         video_count = db.query(Video).filter(Video.user_id == u.id).count()
         resp = AdminUserResponse.model_validate(u)
-        resp.subscription_plan = sub.plan.value if sub else "free"
+        resp.subscription_plan = sub.plan_name if sub else "free"
         resp.video_count = video_count
         result.append(resp)
     return result
@@ -116,7 +116,7 @@ async def update_user(
     )
     video_count = db.query(Video).filter(Video.user_id == user.id).count()
     resp = AdminUserResponse.model_validate(user)
-    resp.subscription_plan = sub.plan.value if sub else "free"
+    resp.subscription_plan = sub.plan_name if sub else "free"
     resp.video_count = video_count
     return resp
 
@@ -175,7 +175,7 @@ async def retry_job(
                 .first()
             )
             if sub:
-                plan = sub.plan.value
+                plan = sub.plan_name
         topic = video.project.topic if video and video.project else ""
         task = celery_app.send_task(
             "tasks.video_generation.generate_video",

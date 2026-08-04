@@ -1,4 +1,4 @@
-.PHONY: setup up down restart logs migrate seed model test lint clean
+.PHONY: setup up down restart logs migrate seed model test smoke test-fast lint clean
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 setup:
@@ -64,6 +64,15 @@ test:
 
 test-watch:
 	docker compose exec api pytest -v --watch
+
+# Fast smoke test — runs in <5s, no Docker required, just Python + venv.
+# Use this as a quick sanity check before pushing or after a fresh clone.
+smoke:
+	bash tests/smoke.sh
+
+# Run the full pytest suite directly (no Docker). Requires the venv set up.
+test-fast:
+	cd api && pytest -v
 
 # ── Linting ────────────────────────────────────────────────────────────────────
 lint:

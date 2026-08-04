@@ -9,7 +9,7 @@ from ..models.user import User
 from ..models.video import Video, VideoStatus
 from ..models.video_job import VideoJob, JobStatus
 from ..models.project import Project
-from ..models.subscription import Subscription, PlanType
+from ..models.subscription import Subscription
 from ..schemas.video import VideoResponse, VideoListResponse, VideoGenerateRequest, VideoJobResponse
 from ..core.security import get_current_user
 from ..core.storage import get_presigned_url
@@ -78,7 +78,7 @@ async def generate_video(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = sub.plan.value if sub else "free"
+    plan = sub.plan_name if sub else "free"
     limit = get_user_plan_limit(plan)
     count = get_videos_this_month(current_user.id, db)
     if count >= limit:

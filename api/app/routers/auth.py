@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from ..database import get_db
 from ..models.user import User, UserRole
-from ..models.subscription import Subscription, PlanType, SubscriptionStatus
+from ..models.subscription import Subscription, SubscriptionStatus
+from ..models.plan import Plan
 from ..schemas.auth import UserRegister, UserLogin, UserResponse, TokenResponse
 from ..core.security import (
     get_password_hash, verify_password, create_access_token,
@@ -38,10 +39,11 @@ async def register(data: UserRegister, response: Response, db: Session = Depends
     except Exception:
         pass  # Non-fatal, stripe may not be configured
 
-    # Create free subscription
+    # Create free subscription — look up the free Plan row to set plan_id
+    free_plan = db.query(Plan).filter(Plan.name == "free").first()
     sub = Subscription(
         user_id=user.id,
-        plan=PlanType.free,
+        plan_id=free_plan.id if free_plan else None,
         status=SubscriptionStatus.active,
     )
     db.add(sub)

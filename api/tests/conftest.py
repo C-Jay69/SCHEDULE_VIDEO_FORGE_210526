@@ -26,3 +26,8 @@ def _patched_create_engine(url, **kwargs):
 
 
 sqlalchemy.create_engine = _patched_create_engine
+
+
+# (no global db_session fixture here — see test_subscription_plan_fk.py for
+# a narrowly-scoped fixture that only creates the tables needed by the FK
+# tests, sidestepping the JSONB-on-SQLite issue.)

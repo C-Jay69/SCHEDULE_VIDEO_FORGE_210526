@@ -31,3 +31,4 @@ class User(Base):
     schedules = relationship("Schedule", back_populates="user", cascade="all, delete-orphan")
     social_accounts = relationship("SocialAccount", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AdminAuditLog", foreign_keys="AdminAuditLog.admin_id", back_populates="admin", cascade="all, delete-orphan")
+    usage_events = relationship("UsageEvent", back_populates="user", cascade="all, delete-orphan")
