@@ -17,6 +17,19 @@ const styles = ["Talking Head", "Slideshow", "Animated", "Documentary", "Tutoria
 const formats = ["Shorts (9:16)", "Landscape (16:9)", "Square (1:1)"]
 const durations = ["30s", "60s", "3min", "5min", "10min"]
 
+const formatValues: Record<string, string> = {
+  "Shorts (9:16)": "short-form",
+  "Landscape (16:9)": "landscape",
+  "Square (1:1)": "square",
+}
+const durationValues: Record<string, number> = {
+  "30s": 30,
+  "60s": 60,
+  "3min": 180,
+  "5min": 300,
+  "10min": 600,
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -47,7 +60,21 @@ export default function NewProjectPage() {
     setError("")
     setLoading(true)
     try {
-      const project = await api.post<{ id: string }>("/projects", form)
+      // 1. Create the project
+      const project = await api.post<{ id: string }>("/projects", {
+        name: form.title || form.topic,
+        description: form.description,
+        topic: form.topic,
+      })
+      // 2. Kick off video generation
+      await api.post("/videos/generate", {
+        project_id: project.id,
+        topic: form.topic,
+        tone: form.tone.toLowerCase(),
+        style: form.style.toLowerCase(),
+        duration_seconds: durationValues[form.duration] || 60,
+        settings: { format: formatValues[form.format] || "short-form" },
+      })
       router.push(`/videos`)
     } catch (err: any) {
       setError(err.message || "Failed to create project")

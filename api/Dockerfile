@@ -5,11 +5,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # api/requirements.txt is referenced relative to the build context root.
+# The cache mount persists pip's wheel cache across builds so re-running the
+# build after a failure doesn't re-download the whole dependency tree.
 COPY api/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 --timeout 300 -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 COPY api/ .
 COPY seed.py /seed.py

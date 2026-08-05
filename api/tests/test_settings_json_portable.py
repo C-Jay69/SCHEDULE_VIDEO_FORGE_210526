@@ -4,6 +4,7 @@ The model previously used postgresql.JSONB which crashed SQLAlchemy when
 running against the in-memory SQLite test DB. After this change, the full
 schema should create cleanly on any backend.
 """
+
 import uuid
 
 
@@ -17,6 +18,7 @@ def test_full_schema_creates_on_sqlite():
     succeeds and the test passes.
     """
     from sqlalchemy import create_engine
+
     from app.models.base import Base
 
     engine = create_engine("sqlite:///:memory:")
@@ -30,9 +32,8 @@ def test_project_settings_json_round_trips():
     from sqlalchemy.orm import sessionmaker
 
     from app.models.base import Base
-    from app.models.user import User, UserRole
     from app.models.project import Project, ProjectStatus
-    from app.models.plan import Plan
+    from app.models.user import User, UserRole
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

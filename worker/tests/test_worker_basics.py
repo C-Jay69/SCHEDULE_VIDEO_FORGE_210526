@@ -10,6 +10,7 @@ What's covered:
 - The lazy DB engine inside worker.db works without crashing at import time
 - The provider base class exposes the expected interface
 """
+
 import os
 
 
@@ -42,7 +43,9 @@ def test_db_module_imports_without_db():
     """
     os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
     import importlib
+
     import worker.db as db_module
+
     importlib.reload(db_module)
 
     assert db_module.SessionLocal is not None
@@ -81,7 +84,7 @@ def test_pipeline_modules_exist():
         try:
             __import__(mod)
         except Exception as e:
-            raise AssertionError(f"{mod} failed to import: {e}")
+            raise AssertionError(f"{mod} failed to import: {e}") from e
 
     # Optional heavy module — only assert if Pillow is installed.
     try:
@@ -91,7 +94,7 @@ def test_pipeline_modules_exist():
     try:
         __import__("worker.pipeline.video_render")
     except Exception as e:
-        raise AssertionError(f"worker.pipeline.video_render failed: {e}")
+        raise AssertionError(f"worker.pipeline.video_render failed: {e}") from e
 
 
 def test_worker_db_lazy_engine_does_not_crash_on_sqlite(monkeypatch):
@@ -115,7 +118,9 @@ def test_worker_db_lazy_engine_does_not_crash_on_sqlite(monkeypatch):
 
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     import importlib
+
     import worker.db as db_module
+
     importlib.reload(db_module)
 
     session = db_module.get_db_session()

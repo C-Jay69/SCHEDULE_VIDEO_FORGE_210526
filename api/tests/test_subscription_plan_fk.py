@@ -6,6 +6,7 @@ rather than carrying an enum. These tests verify:
 - The plan_name property resolves through the relationship
 - The legacy enum column is no longer required for code that reads plans
 """
+
 import uuid
 
 import pytest
@@ -114,15 +115,14 @@ def test_plan_name_resolves_through_relationship(db_session, user, plans):
     assert sub.plan_rel.name == "intense"
 
 
-def test_plan_name_defaults_to_free_when_null(db_session, user):
-    """If a row has neither plan_id nor a legacy enum, fall back to 'free'."""
+def test_plan_name_defaults_to_free_when_null(db_session, user, plans):
+    """plan_id is NOT NULL post-migration 0003; plan_name falls back to 'free' if the
+    relationship hasn't been populated (e.g. a detached row)."""
     from app.models.subscription import Subscription
 
-    sub = Subscription(user_id=user.id, status="active")
-    # plan_id is None at this point
-    db_session.add(sub)
-    db_session.commit()
-
+    sub = Subscription(user_id=user.id, plan_id=plans["free"].id, status="active")
+    # Simulate a detached/unsaved object without a loaded relationship
+    sub.plan_rel = None
     assert sub.plan_name == "free"
 
 

@@ -1,7 +1,7 @@
-import subprocess
-import os
-import tempfile
 import logging
+import os
+import subprocess
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +26,13 @@ def generate_voiceover(script_text: str, output_path: str) -> str:
         # Run Piper TTS
         cmd = [
             "piper",
-            "--model", PIPER_MODEL_PATH,
-            "--output_file", output_path,
+            "--model",
+            PIPER_MODEL_PATH,
+            "--output_file",
+            output_path,
         ]
 
-        with open(txt_path, "r") as stdin_file:
+        with open(txt_path) as stdin_file:
             result = subprocess.run(
                 cmd,
                 stdin=stdin_file,
@@ -62,9 +64,12 @@ def _espeak_fallback(script_text: str, output_path: str) -> str:
         wav_path = output_path if output_path.endswith(".wav") else output_path + ".wav"
         cmd = [
             "espeak-ng",
-            "-v", "en-us",
-            "-s", "150",  # words per minute
-            "-w", wav_path,
+            "-v",
+            "en-us",
+            "-s",
+            "150",  # words per minute
+            "-w",
+            wav_path,
             script_text[:2000],  # Limit length
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -81,10 +86,14 @@ def _create_silent_audio(output_path: str, duration: int = 60) -> str:
     """Create silent audio using FFmpeg as absolute fallback."""
     wav_path = output_path if output_path.endswith(".wav") else output_path + ".wav"
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", f"anullsrc=r=22050:cl=mono",
-        "-t", str(duration),
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=r=22050:cl=mono",
+        "-t",
+        str(duration),
         wav_path,
     ]
     subprocess.run(cmd, capture_output=True, timeout=30)
@@ -96,9 +105,13 @@ def get_audio_duration(audio_path: str) -> float:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 audio_path,
             ],
             capture_output=True,

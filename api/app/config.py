@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
-from functools import lru_cache
 import secrets
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -13,18 +14,32 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
+    # Set the auth cookie Secure flag. Production is always served over HTTPS
+    # (Caddy terminates TLS) so this defaults to True. Local dev over plain
+    # HTTP/LAN should set COOKIE_SECURE=false.
+    cookie_secure: bool = True
+
     # Database
     database_url: str = "postgresql://videoforge:videoforge_secret@postgres:5432/videoforge"
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
 
-    # MinIO
+    # MinIO (local dev) — production should set the AWS S3 aliases below,
+    # which take precedence and let the same MinIO client talk to S3.
     minio_endpoint: str = "minio:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin123"
     minio_bucket: str = "videoforge"
     minio_secure: bool = False
+
+    # AWS S3 aliases (production). When AWS_ACCESS_KEY_ID or S3_BUCKET_NAME
+    # are set, storage resolves to S3 instead of the MinIO dev defaults.
+    s3_bucket_name: str = ""
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-1"
+    aws_endpoint_url: str = ""
 
     # Admin
     admin_email: str = "admin@videoforge.io"
@@ -52,6 +67,14 @@ class Settings(BaseSettings):
     # Whisper
     whisper_model_size: str = "base"
 
+    # SMTP (email) — optional. Leave empty to skip sending emails.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: bool = True
+
     # Celery
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
@@ -61,12 +84,42 @@ class Settings(BaseSettings):
     creator_videos_per_month: int = 25
     pro_videos_per_month: int = 999999
 
+    # ── Storage resolution ─────────────────────────────────────────────
+    # The API + worker use the MinIO client everywhere. When AWS S3 env vars
+    # are present (production), resolve to S3; otherwise fall back to the
+    # MinIO dev defaults. This keeps a single code path for both.
+    @property
+    def storage_endpoint(self) -> str:
+        if self.aws_endpoint_url:
+            return self.aws_endpoint_url
+        if self.aws_access_key_id or self.s3_bucket_name:
+            return f"s3.{self.aws_region}.amazonaws.com"
+        return self.minio_endpoint
+
+    @property
+    def storage_access_key(self) -> str:
+        return self.aws_access_key_id or self.minio_access_key
+
+    @property
+    def storage_secret_key(self) -> str:
+        return self.aws_secret_access_key or self.minio_secret_key
+
+    @property
+    def storage_bucket(self) -> str:
+        return self.s3_bucket_name or self.minio_bucket
+
+    @property
+    def storage_secure(self) -> bool:
+        if self.aws_access_key_id or self.s3_bucket_name:
+            return True
+        return self.minio_secure
+
     class Config:
         env_file = ".env"
         case_sensitive = False
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()
 

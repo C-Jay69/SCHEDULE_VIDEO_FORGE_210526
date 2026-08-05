@@ -9,21 +9,22 @@ from project → video → job → schedule, with the FK relationships intact.
 The actual Celery worker (ffmpeg, OpenAI, YouTube upload) is mocked at the
 task boundary so the test runs in <1s without external services.
 """
+
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base
-from app.models.user import User, UserRole
-from app.models.project import Project, ProjectStatus
-from app.models.video import Video, VideoStatus
-from app.models.video_job import VideoJob, JobStatus
-from app.models.schedule import Schedule, ScheduleStatus, PlatformType
-from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.plan import Plan
+from app.models.project import Project, ProjectStatus
+from app.models.schedule import PlatformType, Schedule, ScheduleStatus
+from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.user import User, UserRole
+from app.models.video import Video, VideoStatus
+from app.models.video_job import JobStatus, VideoJob
 
 
 @pytest.fixture
@@ -149,6 +150,7 @@ def test_celery_task_dispatch_is_mockable(seeded, monkeypatch):
     prepend the repo root to sys.path for the duration of this test only.
     """
     import os as _os
+
     fake_celery_app = MagicMock()
     fake_celery_app.send_task.return_value.id = "task-abc123"
 
@@ -156,9 +158,11 @@ def test_celery_task_dispatch_is_mockable(seeded, monkeypatch):
     monkeypatch.syspath_prepend(repo_root)
 
     import worker.celery_app as real_worker_module
+
     monkeypatch.setattr(real_worker_module, "celery_app", fake_celery_app)
 
-    from worker.celery_app import celery_app  # noqa: F401
+    from worker.celery_app import celery_app
+
     result = celery_app.send_task(
         "tasks.video_generation.generate_video",
         args=[str(seeded["video"].id), str(seeded["job"].id), "Future of AI", {"plan": "free"}],
@@ -192,8 +196,9 @@ def test_subscription_plan_name_via_fk(seeded):
     assert s.plan_name == "free"
 
     # Upgrade: switch to scheduler (if it exists)
-    scheduler = seeded["session"] = None  # placeholder
+    seeded["session"] = None  # placeholder
     from app.models.plan import Plan as _Plan
+
     new_engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(new_engine)
     new_session = sessionmaker(bind=new_engine)()

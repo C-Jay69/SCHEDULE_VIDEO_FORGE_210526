@@ -21,8 +21,16 @@ export default function ConnectPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get<ConnectionStatus>("/social/connections")
-      .then(setConnections)
+    api.get<{ platform: string; name: string; connected: boolean }[]>("/social/connections")
+      .then((list) => {
+        setConnections((prev) => {
+          const next: ConnectionStatus = { ...prev }
+          list.forEach((c) => {
+            if (c.platform in next) next[c.platform as keyof ConnectionStatus] = c.connected
+          })
+          return next
+        })
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])

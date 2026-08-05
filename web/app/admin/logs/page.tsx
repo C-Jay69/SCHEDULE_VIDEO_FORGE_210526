@@ -10,13 +10,11 @@ import { RefreshCw, Search } from "lucide-react"
 
 interface AuditLog {
   id: string
-  user_email: string
+  admin_id: string
+  admin_email?: string
   action: string
-  resource_type: string
-  resource_id?: string
-  ip_address?: string
+  target?: string
   created_at: string
-  metadata?: Record<string, any>
 }
 
 const actionColors: Record<string, string> = {
@@ -26,7 +24,7 @@ const actionColors: Record<string, string> = {
   login: "bg-gray-100 text-gray-600",
   logout: "bg-gray-100 text-gray-600",
   publish: "bg-purple-100 text-purple-700",
-  stripe_event: "bg-yellow-100 text-yellow-700",
+  retry_job: "bg-orange-100 text-orange-700",
 }
 
 export default function AdminLogsPage() {
@@ -38,7 +36,7 @@ export default function AdminLogsPage() {
 
   const fetchLogs = useCallback(async () => {
     try {
-      const data = await api.get<AuditLog[]>("/admin/logs")
+      const data = await api.get<AuditLog[]>("/admin/logs?limit=200")
       setLogs(data)
     } catch (e) {
       console.error(e)
@@ -53,10 +51,9 @@ export default function AdminLogsPage() {
 
   const filtered = logs.filter((l) => {
     const matchSearch =
-      l.user_email.includes(search) ||
-      l.action.includes(search) ||
-      l.resource_type.includes(search) ||
-      (l.resource_id || "").includes(search)
+      (l.admin_email || "").toLowerCase().includes(search.toLowerCase()) ||
+      l.action.toLowerCase().includes(search.toLowerCase()) ||
+      (l.target || "").toLowerCase().includes(search.toLowerCase())
     const matchAction = actionFilter === "all" || l.action === actionFilter
     return matchSearch && matchAction
   })
@@ -91,18 +88,16 @@ export default function AdminLogsPage() {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-4 py-3 font-medium text-gray-600">Time</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Admin</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Action</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Resource</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">IP</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600">Details</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Target</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="py-12 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={4} className="py-12 text-center text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="py-12 text-center text-gray-400">No logs found</td></tr>
+              <tr><td colSpan={4} className="py-12 text-center text-gray-400">No logs found</td></tr>
             ) : (
               filtered.map((l) => (
                 <>
@@ -114,26 +109,21 @@ export default function AdminLogsPage() {
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                       {new Date(l.created_at).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{l.user_email}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{l.admin_email || l.admin_id?.slice(0, 8)}</td>
                     <td className="px-4 py-3">
                       <Badge className={actionColors[l.action] || "bg-gray-100 text-gray-600"}>
                         {l.action}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {l.resource_type}
-                      {l.resource_id && <span className="text-gray-400"> #{l.resource_id.slice(0, 8)}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{l.ip_address || "—"}</td>
-                    <td className="px-4 py-3 text-right text-xs text-violet-600">
-                      {l.metadata ? (expanded === l.id ? "▲" : "▼") : "—"}
+                    <td className="px-4 py-3 text-gray-600 text-xs max-w-[400px] truncate">
+                      {l.target || "—"}
                     </td>
                   </tr>
-                  {expanded === l.id && l.metadata && (
+                  {expanded === l.id && l.target && (
                     <tr key={`${l.id}-meta`} className="bg-gray-50">
-                      <td colSpan={6} className="px-4 py-3">
+                      <td colSpan={4} className="px-4 py-3">
                         <pre className="text-xs text-gray-600 overflow-auto max-h-32 bg-gray-100 p-3 rounded">
-                          {JSON.stringify(l.metadata, null, 2)}
+                          {l.target}
                         </pre>
                       </td>
                     </tr>

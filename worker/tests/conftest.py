@@ -8,6 +8,7 @@ when running from inside worker/ we have to do it ourselves.
 Also patches create_engine so the worker's lazy DB engine accepts the
 sqlite URLs the tests use.
 """
+
 import os
 import sys
 
@@ -21,7 +22,8 @@ os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 # Strip Postgres-only pool kwargs from create_engine when targeting sqlite.
-import sqlalchemy
+import sqlalchemy  # noqa: E402
+
 _real_create_engine = sqlalchemy.create_engine
 
 

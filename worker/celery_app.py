@@ -1,6 +1,19 @@
+import os
+import sys
+
 from celery import Celery
 from celery.schedules import crontab
-import os
+
+# Worker runs with api/app copied into the image (or available on PYTHONPATH
+# in dev). Populate secrets from the configured backend (AWS Secrets Manager,
+# file mounts) BEFORE reading broker/backend URLs — same as the API does.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+try:
+    from app.core.secrets import populate_environ
+
+    populate_environ()
+except Exception:  # app package not importable yet (CI/test) — env mode is fine
+    pass
 
 broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://redis:6379/0"))
 result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")

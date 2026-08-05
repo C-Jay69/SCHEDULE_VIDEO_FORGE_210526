@@ -1,7 +1,6 @@
 """Tests for the lazy engine initialization."""
-import os
 
-import pytest
+import contextlib
 
 
 def test_engine_not_built_at_module_import(monkeypatch):
@@ -17,10 +16,12 @@ def test_engine_not_built_at_module_import(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     # Clear any cached engine from previous tests
     from app import database
+
     database.reset_engine()
 
     # Importing should not raise
     from app.database import engine
+
     assert engine is not None
 
 
@@ -28,6 +29,7 @@ def test_engine_built_on_first_attribute_access(monkeypatch):
     """Touching the engine proxy triggers the real Engine construction."""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     from app import database
+
     database.reset_engine()
     assert database._engine is None, "engine should not be built yet"
 
@@ -42,6 +44,7 @@ def test_get_engine_is_thread_safe(monkeypatch):
     """get_engine() returns the same Engine instance across calls."""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     from app import database
+
     database.reset_engine()
     e1 = database.get_engine()
     e2 = database.get_engine()
@@ -52,6 +55,7 @@ def test_reset_engine_disposes_and_clears(monkeypatch):
     """reset_engine() drops the cached Engine so it can be rebuilt."""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     from app import database
+
     database.reset_engine()
     _ = database.get_engine()  # build it
     assert database._engine is not None
@@ -63,6 +67,7 @@ def test_session_binds_to_engine_per_session(monkeypatch):
     """get_db() returns a session that uses the lazy engine."""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     from app import database
+
     database.reset_engine()
 
     gen = database.get_db()
@@ -71,7 +76,5 @@ def test_session_binds_to_engine_per_session(monkeypatch):
         # The session should have a bind set
         assert session.bind is not None
     finally:
-        try:
+        with contextlib.suppress(StopIteration):
             next(gen)
-        except StopIteration:
-            pass

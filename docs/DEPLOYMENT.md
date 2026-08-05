@@ -46,7 +46,8 @@ The IAM policy needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`,
 
 ```bash
 # These are the keys our secrets loader knows about
-for key in SECRET_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
+for key in SECRET_KEY DATABASE_URL REDIS_URL \
+           STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
            STRIPE_PUBLISHABLE_KEY NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY \
            STRIPE_FREE_PRICE_ID STRIPE_SCHEDULER_PRICE_ID \
            STRIPE_COMMITTED_PRICE_ID STRIPE_INTENSE_PRICE_ID \
@@ -153,9 +154,12 @@ account or region.
 
 ## 9. Monitoring
 
-The compose file sets `SENTRY_DSN` if you provide one — both api and worker
-will report exceptions there. For Uptime monitoring, point a probe at
-`https://app.example.com/health`.
+The compose file passes `SENTRY_DSN` to both api and worker if you set it. To
+make it effective, install the SDK inside the images (add `sentry-sdk` to
+`api/requirements.txt` and `worker/requirements.txt`) — or skip Sentry entirely;
+the API logs structured requests via middleware and both containers log to
+stdout (visible with `docker compose logs`). For uptime monitoring, point a
+probe at `https://app.example.com/health`.
 
 ---
 

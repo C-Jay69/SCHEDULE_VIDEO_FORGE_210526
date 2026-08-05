@@ -24,8 +24,8 @@ export function useAuth() {
   }, [fetchUser]);
 
   // --- ADDED THIS LOGIN FUNCTION ---
-  const login = async (credentials: any) => {
-    const response = await apiLogin(credentials);
+  const login = async (credentials: { email: string; password: string }) => {
+    const response = await apiLogin(credentials.email, credentials.password);
     await fetchUser(); // Refresh user state after login
     return response;
   };

@@ -1,9 +1,11 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+import enum
+import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import uuid
-import enum
+
 from ..database import Base
 
 
@@ -30,5 +32,10 @@ class User(Base):
     videos = relationship("Video", back_populates="user", cascade="all, delete-orphan")
     schedules = relationship("Schedule", back_populates="user", cascade="all, delete-orphan")
     social_accounts = relationship("SocialAccount", back_populates="user", cascade="all, delete-orphan")
-    audit_logs = relationship("AdminAuditLog", foreign_keys="AdminAuditLog.admin_id", back_populates="admin", cascade="all, delete-orphan")
+    audit_logs = relationship(
+        "AdminAuditLog",
+        foreign_keys="AdminAuditLog.admin_id",
+        back_populates="admin",
+        cascade="all, delete-orphan",
+    )
     usage_events = relationship("UsageEvent", back_populates="user", cascade="all, delete-orphan")

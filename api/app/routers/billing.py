@@ -1,26 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
-import stripe
-from ..database import get_db
-from ..models.user import User
-from ..models.subscription import Subscription, SubscriptionStatus
-from ..models.plan import Plan
-from ..schemas.billing import PlanResponse, CheckoutRequest, SubscriptionResponse
-from ..core.security import get_current_user
-from ..config import settings
-from typing import List
 import logging
-import json
+from datetime import datetime, timezone
+
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+
+from ..config import settings
+from ..core.rate_limiter import rate_limit
+from ..core.security import get_current_user
+from ..database import get_db
+from ..models.billing_event import BillingEvent
+from ..models.plan import Plan
+from ..models.subscription import Subscription, SubscriptionStatus
+from ..models.user import User
+from ..models.webhook_event import WebhookEvent
+from ..schemas.billing import CheckoutRequest, PlanResponse, SubscriptionResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["billing"])
 stripe.api_key = settings.stripe_secret_key
 
-@router.get("/billing/plans", response_model=List[PlanResponse])
+
+@router.get("/billing/plans", response_model=list[PlanResponse])
 async def get_plans(db: Session = Depends(get_db)):
     """Fetch all available plans from the database."""
-    plans = db.query(Plan).all()
+    plans = db.query(Plan).filter(Plan.is_active.is_(True)).all()
     return plans
 
 
@@ -29,6 +33,7 @@ async def create_checkout(
     data: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _: None = Depends(rate_limit("billing")),
 ):
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=400, detail="Stripe not configured")
@@ -53,10 +58,11 @@ async def create_checkout(
         )
         return {"checkout_url": session.url}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/billing/portal")
+@router.post("/billing/portal")
 async def billing_portal(
     current_user: User = Depends(get_current_user),
 ):
@@ -68,9 +74,46 @@ async def billing_portal(
             customer=current_user.stripe_customer_id,
             return_url=f"{settings.next_public_app_url}/settings",
         )
-        return {"portal_url": session.url}
+        # Return both shapes so both GET and POST callers can destructure.
+        return {"portal_url": session.url, "url": session.url}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/billing/subscription", response_model=SubscriptionResponse)
+async def get_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == current_user.id)
+        .order_by(Subscription.created_at.desc())
+        .first()
+    )
+    if not sub:
+        raise HTTPException(status_code=404, detail="No subscription found")
+
+    return SubscriptionResponse(
+        id=str(sub.id),
+        plan=sub.plan_name,
+        status=sub.status.value if hasattr(sub.status, "value") else str(sub.status),
+        period_end=sub.period_end,
+    )
+
+
+def _persist_webhook(db: Session, event) -> None:
+    payload = event.get("data", {}).get("object", {})
+    wh = WebhookEvent(
+        provider="stripe",
+        event_id=event.get("id"),
+        event_type=event.get("type"),
+        payload_json=payload,
+        processed=False,
+    )
+    db.add(wh)
+    db.flush()
+    return wh
 
 
 @router.post("/webhooks/stripe")
@@ -79,16 +122,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     sig_header = request.headers.get("stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.stripe_webhook_secret
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.stripe_webhook_secret)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        raise HTTPException(status_code=400, detail="Invalid payload") from None
     except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid signature") from None
 
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
+    # Persist the raw event so admins can inspect delivery history.
+    webhook_event = _persist_webhook(db, event)
+    event_type = event.get("type", "")
+    obj = event.get("data", {}).get("object", {})
+
+    if event_type == "checkout.session.completed":
+        session = obj
         user_id = session.get("metadata", {}).get("user_id")
         plan_name = session.get("metadata", {}).get("plan_name")
         stripe_sub_id = session.get("subscription")
@@ -96,10 +142,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if user_id and plan_name:
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                # Find the Plan row to attach to this subscription via FK
                 db_plan = db.query(Plan).filter(Plan.name == plan_name).first()
                 if not db_plan:
                     logger.error(f"Webhook error: Plan {plan_name} not found in DB")
+                    webhook_event.error_message = f"Plan {plan_name} not found"
+                    db.commit()
                     return {"status": "plan_not_found"}
 
                 sub = (
@@ -108,7 +155,6 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     .order_by(Subscription.created_at.desc())
                     .first()
                 )
-
                 if sub:
                     sub.plan_id = db_plan.id
                     sub.status = SubscriptionStatus.active
@@ -121,26 +167,55 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         stripe_subscription_id=stripe_sub_id,
                     )
                     db.add(new_sub)
-                db.commit()
+                db.add(
+                    BillingEvent(
+                        user_id=user.id,
+                        stripe_event_id=event.get("id"),
+                        event_type="checkout.session.completed",
+                        metadata_json={"plan": plan_name},
+                    )
+                )
 
-    elif event["type"] in ("customer.subscription.updated", "customer.subscription.deleted"):
-        stripe_sub = event["data"]["object"]
-        sub = (
-            db.query(Subscription)
-            .filter(Subscription.stripe_subscription_id == stripe_sub["id"])
-            .first()
-        )
+    elif event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
+        stripe_sub = obj
+        sub = db.query(Subscription).filter(Subscription.stripe_subscription_id == stripe_sub["id"]).first()
         if sub:
             status_map = {
                 "active": SubscriptionStatus.active,
                 "canceled": SubscriptionStatus.canceled,
                 "past_due": SubscriptionStatus.past_due,
                 "trialing": SubscriptionStatus.trialing,
+                "incomplete": SubscriptionStatus.incomplete,
             }
             sub.status = status_map.get(stripe_sub["status"], SubscriptionStatus.canceled)
             if stripe_sub.get("current_period_end"):
-                from datetime import datetime
-                sub.period_end = datetime.fromtimestamp(stripe_sub["current_period_end"])
-            db.commit()
+                sub.period_end = datetime.fromtimestamp(stripe_sub["current_period_end"], tz=timezone.utc)
+            db.add(
+                BillingEvent(
+                    user_id=sub.user_id,
+                    stripe_event_id=event.get("id"),
+                    event_type=event_type,
+                    metadata_json={"stripe_subscription_id": stripe_sub["id"]},
+                )
+            )
 
+    elif event_type in ("invoice.payment_succeeded", "invoice.payment_failed"):
+        invoice = obj
+        sub = db.query(Subscription).filter(Subscription.stripe_subscription_id == invoice.get("subscription")).first()
+        if sub:
+            if event_type == "invoice.payment_failed":
+                sub.status = SubscriptionStatus.past_due
+            db.add(
+                BillingEvent(
+                    user_id=sub.user_id,
+                    stripe_event_id=event.get("id"),
+                    event_type=event_type,
+                    amount_cents=invoice.get("amount_due"),
+                    metadata_json={"invoice_id": invoice.get("id")},
+                )
+            )
+
+    webhook_event.processed = True
+    webhook_event.processed_at = datetime.now(timezone.utc)
+    db.commit()
     return {"status": "ok"}

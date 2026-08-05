@@ -1,6 +1,5 @@
-import os
 import logging
-from typing import List, Tuple
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +13,7 @@ def get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
         from faster_whisper import WhisperModel
+
         logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
         _whisper_model = WhisperModel(
             WHISPER_MODEL_SIZE,
@@ -30,7 +30,7 @@ def generate_subtitles(audio_path: str, output_srt_path: str) -> str:
     """
     try:
         model = get_whisper_model()
-        segments, info = model.transcribe(
+        segments, _ = model.transcribe(
             audio_path,
             beam_size=3,
             language="en",

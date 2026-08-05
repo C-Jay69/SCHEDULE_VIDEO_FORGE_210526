@@ -1,59 +1,94 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, timezone
+import contextlib
 import uuid
-from ..database import get_db
-from ..models.user import User
-from ..models.video import Video, VideoStatus
-from ..models.video_job import VideoJob, JobStatus
-from ..models.project import Project
-from ..models.subscription import Subscription
-from ..schemas.video import VideoResponse, VideoListResponse, VideoGenerateRequest, VideoJobResponse
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from ..config import settings
 from ..core.security import get_current_user
 from ..core.storage import get_presigned_url
-from ..config import settings
+from ..database import get_db
+from ..models.plan import Plan
+from ..models.project import Project
+from ..models.schedule import Schedule, ScheduleStatus
+from ..models.subscription import Subscription
+from ..models.user import User
+from ..models.video import Video, VideoStatus
+from ..models.video_job import JobStatus, VideoJob
+from ..schemas.schedule import ScheduleCreate, ScheduleResponse
+from ..schemas.video import (
+    VideoGenerateRequest,
+    VideoJobResponse,
+    VideoListResponse,
+    VideoResponse,
+)
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 
-def get_user_plan_limit(plan: str) -> int:
-    limits = {
-        "free": settings.free_videos_per_month,
-        "creator": settings.creator_videos_per_month,
-        "pro": settings.pro_videos_per_month,
+def get_user_plan_limit(plan_name: str, db: Session) -> int:
+    """Resolve a user's monthly video limit from the Plan table.
+
+    Seeded plan names: free / scheduler / committed / intense. Falls back to
+    the free limit if the plan row (or a legacy name) can't be resolved.
+    """
+    plan = db.query(Plan).filter(Plan.name == plan_name).first()
+    if plan:
+        return plan.video_limit_monthly
+    legacy = {
+        "creator": "scheduler",
+        "pro": "intense",
     }
-    return limits.get(plan, settings.free_videos_per_month)
+    plan = db.query(Plan).filter(Plan.name == legacy.get(plan_name, plan_name)).first()
+    if plan:
+        return plan.video_limit_monthly
+    return settings.free_videos_per_month
 
 
 def get_videos_this_month(user_id, db: Session) -> int:
     now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return db.query(Video).filter(
-        Video.user_id == user_id,
-        Video.created_at >= start_of_month,
-    ).count()
+    return (
+        db.query(Video)
+        .filter(
+            Video.user_id == user_id,
+            Video.created_at >= start_of_month,
+        )
+        .count()
+    )
 
 
 def enrich_video(video: Video, db: Session) -> VideoResponse:
-    latest_job = (
-        db.query(VideoJob)
-        .filter(VideoJob.video_id == video.id)
-        .order_by(VideoJob.created_at.desc())
-        .first()
-    )
+    latest_job = db.query(VideoJob).filter(VideoJob.video_id == video.id).order_by(VideoJob.created_at.desc()).first()
     download_url = None
     if video.storage_key:
-        try:
+        with contextlib.suppress(Exception):
             download_url = get_presigned_url(video.storage_key)
-        except Exception:
-            pass
 
     resp = VideoResponse.model_validate(video)
     resp.download_url = download_url
+    resp.stream_url = download_url
     if latest_job:
         resp.latest_job = VideoJobResponse.model_validate(latest_job)
+
+    project = db.query(Project).filter(Project.id == video.project_id).first()
+    if project:
+        resp.title = project.topic
+        settings_json = project.settings_json or {}
+        resp.platform = settings_json.get("platform", "youtube")
+        resp.format = settings_json.get("format", "short-form")
+        duration = settings_json.get("duration_seconds", 60)
+        resp.duration = f"{int(duration)}s"
+
+    schedule = db.query(Schedule).filter(Schedule.video_id == video.id).order_by(Schedule.created_at.desc()).first()
+    if schedule:
+        resp.schedule = {
+            "id": str(schedule.id),
+            "scheduled_at": schedule.scheduled_at.isoformat() if schedule.scheduled_at else None,
+            "platform": schedule.platform.value if hasattr(schedule.platform, "value") else schedule.platform,
+            "status": schedule.status.value if hasattr(schedule.status, "value") else schedule.status,
+        }
     return resp
 
 
@@ -64,10 +99,14 @@ async def generate_video(
     db: Session = Depends(get_db),
 ):
     # Check project ownership
-    project = db.query(Project).filter(
-        Project.id == data.project_id,
-        Project.user_id == current_user.id,
-    ).first()
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == data.project_id,
+            Project.user_id == current_user.id,
+        )
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -79,7 +118,7 @@ async def generate_video(
         .first()
     )
     plan = sub.plan_name if sub else "free"
-    limit = get_user_plan_limit(plan)
+    limit = get_user_plan_limit(plan, db)
     count = get_videos_this_month(current_user.id, db)
     if count >= limit:
         raise HTTPException(
@@ -106,23 +145,48 @@ async def generate_video(
     # Dispatch Celery task
     try:
         from worker.celery_app import celery_app
+
         task = celery_app.send_task(
             "tasks.video_generation.generate_video",
-            args=[str(video.id), str(job.id), data.topic, {
-                "tone": data.tone,
-                "style": data.style,
-                "duration_seconds": data.duration_seconds,
-                "plan": plan,
-                **(data.settings or {}),
-            }],
-            queue="priority" if plan == "pro" else "default",
+            args=[
+                str(video.id),
+                str(job.id),
+                data.topic,
+                {
+                    "tone": data.tone,
+                    "style": data.style,
+                    "duration_seconds": data.duration_seconds,
+                    "plan": plan,
+                    **(data.settings or {}),
+                },
+            ],
+            queue="priority" if plan in ("intense", "pro") else "default",
         )
         job.celery_task_id = task.id
         db.commit()
-    except Exception as e:
+    except Exception:
         # Celery may not be available in dev — job stays pending
         pass
 
+    return enrich_video(video, db)
+
+
+@router.get("/{video_id}", response_model=VideoResponse)
+async def get_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
     return enrich_video(video, db)
 
 
@@ -132,10 +196,14 @@ async def get_video_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    video = db.query(Video).filter(
-        Video.id == video_id,
-        Video.user_id == current_user.id,
-    ).first()
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     return enrich_video(video, db)
@@ -147,10 +215,14 @@ async def download_video(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    video = db.query(Video).filter(
-        Video.id == video_id,
-        Video.user_id == current_user.id,
-    ).first()
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     if not video.storage_key:
@@ -158,6 +230,113 @@ async def download_video(
 
     url = get_presigned_url(video.storage_key, expires_hours=1)
     return {"download_url": url}
+
+
+@router.post("/{video_id}/regenerate", response_model=VideoResponse)
+async def regenerate_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    project = db.query(Project).filter(Project.id == video.project_id).first()
+    job = VideoJob(video_id=video.id, status=JobStatus.pending)
+    db.add(job)
+    video.status = VideoStatus.pending
+    video.error_message = None
+    db.commit()
+    db.refresh(job)
+
+    try:
+        from worker.celery_app import celery_app
+
+        task = celery_app.send_task(
+            "tasks.video_generation.generate_video",
+            args=[str(video.id), str(job.id), project.topic if project else "", {"plan": "free"}],
+        )
+        job.celery_task_id = task.id
+        db.commit()
+    except Exception:
+        pass
+
+    return enrich_video(video, db)
+
+
+@router.post("/{video_id}/schedule", response_model=ScheduleResponse, status_code=201)
+async def schedule_video(
+    video_id: uuid.UUID,
+    data: ScheduleCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if video.status != VideoStatus.completed:
+        raise HTTPException(status_code=400, detail="Video must be completed before scheduling")
+
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == current_user.id)
+        .order_by(Subscription.created_at.desc())
+        .first()
+    )
+    plan = sub.plan_name if sub else "free"
+    if data.platform == "youtube" and plan == "free":
+        raise HTTPException(
+            status_code=402,
+            detail="YouTube auto-publish requires a paid plan",
+        )
+
+    schedule = Schedule(
+        video_id=video.id,
+        user_id=current_user.id,
+        platform=data.platform,
+        scheduled_at=data.scheduled_at,
+        status=ScheduleStatus.pending,
+    )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return ScheduleResponse.model_validate(schedule)
+
+
+@router.delete("/{video_id}")
+async def delete_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    db.delete(video)
+    db.commit()
+    return {"message": "Video deleted"}
 
 
 @router.get("", response_model=VideoListResponse)

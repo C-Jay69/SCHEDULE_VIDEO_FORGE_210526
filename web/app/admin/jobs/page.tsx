@@ -10,12 +10,10 @@ import { Search, RefreshCw, RotateCcw } from "lucide-react"
 
 interface Job {
   id: string
-  task_name: string
+  video_id: string
   status: string
-  user_email: string
   created_at: string
-  started_at?: string
-  completed_at?: string
+  progress_pct?: number
   error?: string
   celery_task_id?: string
 }
@@ -37,8 +35,8 @@ export default function AdminJobsPage() {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const data = await api.get<Job[]>("/admin/jobs")
-      setJobs(data)
+      const data = await api.get<{ jobs: Job[]; total: number }>("/admin/jobs")
+      setJobs(data.jobs)
     } catch (e) {
       console.error(e)
     } finally {
@@ -62,7 +60,7 @@ export default function AdminJobsPage() {
   }
 
   const filtered = jobs.filter((j) => {
-    const matchSearch = j.task_name.includes(search) || j.user_email.includes(search) || j.id.includes(search)
+    const matchSearch = (j.video_id && j.video_id.includes(search)) || j.id.includes(search)
     const matchStatus = statusFilter === "all" || j.status === statusFilter
     return matchSearch && matchStatus
   })
@@ -97,39 +95,34 @@ export default function AdminJobsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Task</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Video</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Progress</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Created</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Duration</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="py-12 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={5} className="py-12 text-center text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="py-12 text-center text-gray-400">No jobs found</td></tr>
+              <tr><td colSpan={5} className="py-12 text-center text-gray-400">No jobs found</td></tr>
             ) : (
               filtered.map((j) => {
-                const duration = j.completed_at && j.started_at
-                  ? `${((new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()) / 1000).toFixed(1)}s`
-                  : j.started_at ? "running…" : "—"
                 return (
                   <tr key={j.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800 font-mono text-xs">{j.task_name}</p>
+                      <p className="font-medium text-gray-800 font-mono text-xs">{j.video_id}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{j.id.slice(0, 8)}…</p>
                       {j.error && (
                         <p className="text-xs text-red-500 mt-1 truncate max-w-[200px]" title={j.error}>{j.error}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{j.user_email}</td>
                     <td className="px-4 py-3">
                       <Badge className={statusColors[j.status] || "bg-gray-100 text-gray-600"}>{j.status}</Badge>
                     </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{j.progress_pct ?? 0}%</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{new Date(j.created_at).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{duration}</td>
                     <td className="px-4 py-3 text-right">
                       {j.status === "failed" && (
                         <Button

@@ -1,8 +1,10 @@
-from sqlalchemy import Column, ForeignKey, DateTime, JSON, String, Integer
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from .base import Base
+
 
 class UsageEvent(Base):
     __tablename__ = "usage_events"

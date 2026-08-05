@@ -1,11 +1,13 @@
-import httpx
 import json
 import logging
-import os
-from typing import Any, Dict
+from typing import Any
+
+import httpx
+
 from .base import TextGenerationProvider
 
 logger = logging.getLogger(__name__)
+
 
 class OpenRouterProvider(TextGenerationProvider):
     def __init__(self, api_key: str, model: str = "meta-llama/llama-3.1-8b-instruct:free"):
@@ -16,13 +18,7 @@ class OpenRouterProvider(TextGenerationProvider):
     def provider_name(self) -> str:
         return "openrouter"
 
-    async def generate_script(
-        self, 
-        topic: str, 
-        tone: str, 
-        style: str, 
-        duration_seconds: int
-    ) -> str:
+    async def generate_script(self, topic: str, tone: str, style: str, duration_seconds: int) -> str:
         prompt = f"""You are a professional short-form video script writer.
 Write a {tone} video script about: {topic}
 Requirements:
@@ -46,7 +42,7 @@ Return ONLY the script text, no stage directions or extra formatting."""
                     json={
                         "model": self.model,
                         "messages": [{"role": "user", "content": prompt}],
-                    }
+                    },
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -55,7 +51,7 @@ Return ONLY the script text, no stage directions or extra formatting."""
             logger.error(f"OpenRouter script generation failed: {e}")
             raise
 
-    async def generate_metadata(self, topic: str) -> Dict[str, Any]:
+    async def generate_metadata(self, topic: str) -> dict[str, Any]:
         prompt = f"""You are a YouTube SEO expert. For a video about: {topic}
 Generate: 1. title (max 70 chars), 2. description (2 sentences), 3. 10 tags (comma-separated).
 Return ONLY a valid JSON object with keys: 'title', 'description', 'tags'."""
@@ -72,8 +68,8 @@ Return ONLY a valid JSON object with keys: 'title', 'description', 'tags'."""
                     json={
                         "model": self.model,
                         "messages": [{"role": "user", "content": prompt}],
-                        "response_format": {"type": "json_object"}
-                    }
+                        "response_format": {"type": "json_object"},
+                    },
                 )
                 response.raise_for_status()
                 result = response.json()

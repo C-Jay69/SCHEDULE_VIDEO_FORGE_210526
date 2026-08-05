@@ -11,7 +11,7 @@ Both add the appropriate path so the api models import correctly.
 
 Env vars:
     DATABASE_URL       Postgres connection string
-    ADMIN_EMAIL        Admin email (default: admin@videoforge.local)
+    ADMIN_EMAIL        Admin email (default: admin@videoforge.io)
     ADMIN_PASSWORD     Admin password (default: change-me-locally)
     TEST_USER_EMAIL    Test user email
     TEST_USER_PASSWORD Test user password
@@ -23,17 +23,30 @@ from datetime import datetime, timezone
 
 
 def _bootstrap_path():
-    """Put the api package on sys.path no matter where this script is run."""
+    """Put the api package on sys.path no matter where this script is run.
+
+    Looks for a directory that contains an `app/__init__.py` package in:
+      • the api container (/app, when seed.py lives at /seed.py)
+      • the host repo root (api/app)
+      • the host api/ dir, or cwd
+    """
     here = os.path.dirname(os.path.abspath(__file__))
-    # Running inside the container: api code is at /app
-    if os.path.isdir(os.path.join(here, "app")):
-        sys.path.insert(0, here)
-    # Running from the host repo root: api code is at api/
-    elif os.path.isdir(os.path.join(here, "api", "app")):
-        sys.path.insert(0, os.path.join(here, "api"))
-    else:
-        # Last resort: assume cwd is the repo root and api/ is a sibling
-        sys.path.insert(0, os.path.join(os.getcwd(), "api"))
+    candidates = []
+    if here and here != "/":
+        candidates.append(here)
+    candidates.extend(
+        [
+            os.path.join(here, "app"),  # container: /app
+            os.path.join(here, "api"),  # host repo root
+            os.path.join(os.getcwd(), "api"),
+        ]
+    )
+    for candidate in candidates:
+        if os.path.isfile(os.path.join(candidate, "app", "__init__.py")):
+            sys.path.insert(0, candidate)
+            return
+    # Last resort: assume cwd is the repo root and api/ is a sibling.
+    sys.path.insert(0, os.path.join(os.getcwd(), "api"))
 
 
 _bootstrap_path()
@@ -49,9 +62,9 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://videoforge:videoforge_secret@postgres:5432/videoforge",
 )
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@videoforge.local")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@videoforge.io")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change-me-locally")
-TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "test@videoforge.local")
+TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "test@videoforge.io")
 TEST_USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "testpass123!")
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")

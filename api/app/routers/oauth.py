@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
 from google_auth_oauthlib.flow import Flow
-from ..database import get_db
-from ..models.user import User
-from ..models.social_account import SocialAccount
-from ..core.security import get_current_user, get_token_from_request, decode_token
-from ..core.encryption import encrypt_token
+from sqlalchemy.orm import Session
+
 from ..config import settings
-import json
-from datetime import datetime, timezone
+from ..core.encryption import encrypt_token
+from ..core.security import get_current_user
+from ..database import get_db
+from ..models.social_account import SocialAccount
+from ..models.user import User
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
@@ -38,9 +37,9 @@ def get_flow():
 async def youtube_connect(request: Request, current_user: User = Depends(get_current_user)):
     if not settings.youtube_client_id:
         raise HTTPException(status_code=400, detail="YouTube OAuth not configured")
-    
+
     flow = get_flow()
-    auth_url, state = flow.authorization_url(
+    auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         state=str(current_user.id),
@@ -52,9 +51,9 @@ async def youtube_connect(request: Request, current_user: User = Depends(get_cur
 @router.get("/youtube/callback")
 async def youtube_callback(
     request: Request,
-    code: str = None,
-    state: str = None,
-    error: str = None,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
     db: Session = Depends(get_db),
 ):
     if error:
@@ -73,6 +72,7 @@ async def youtube_callback(
     # Get channel info
     try:
         from googleapiclient.discovery import build
+
         youtube = build("youtube", "v3", credentials=credentials)
         channel_resp = youtube.channels().list(part="snippet", mine=True).execute()
         channel_name = channel_resp["items"][0]["snippet"]["title"] if channel_resp.get("items") else "YouTube"
@@ -80,10 +80,14 @@ async def youtube_callback(
         channel_name = "YouTube"
 
     # Save / update social account
-    existing = db.query(SocialAccount).filter(
-        SocialAccount.user_id == user.id,
-        SocialAccount.platform == "youtube",
-    ).first()
+    existing = (
+        db.query(SocialAccount)
+        .filter(
+            SocialAccount.user_id == user.id,
+            SocialAccount.platform == "youtube",
+        )
+        .first()
+    )
 
     if existing:
         existing.account_name = channel_name

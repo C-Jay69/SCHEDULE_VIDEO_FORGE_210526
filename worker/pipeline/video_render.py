@@ -1,9 +1,12 @@
-import subprocess
-import os
+import contextlib
 import logging
+import os
+import shutil
+import subprocess
 import tempfile
-from PIL import Image, ImageDraw, ImageFont
 import textwrap
+
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +17,7 @@ FPS = 30
 
 BACKGROUND_COLORS = [
     ("#0f0c29", "#302b63"),  # Deep purple
-    ("#134e5e", "#71b280"),  # Teal green  
+    ("#134e5e", "#71b280"),  # Teal green
     ("#1a1a2e", "#16213e"),  # Dark blue
     ("#0f2027", "#2c5364"),  # Dark cyan
     ("#16213e", "#0f3460"),  # Navy blue
@@ -44,6 +47,7 @@ def render_video(
     try:
         # Get audio duration
         from .tts import get_audio_duration
+
         duration = get_audio_duration(audio_path)
         logger.info(f"Audio duration: {duration}s")
 
@@ -60,20 +64,34 @@ def render_video(
 
         # Assemble with FFmpeg
         cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-framerate", str(FPS),
-            "-i", bg_path,
-            "-i", audio_path,
-            "-vf", filters,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-t", str(duration),
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
+            "ffmpeg",
+            "-y",
+            "-loop",
+            "1",
+            "-framerate",
+            str(FPS),
+            "-i",
+            bg_path,
+            "-i",
+            audio_path,
+            "-vf",
+            filters,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-t",
+            str(duration),
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
             output_path,
         ]
 
@@ -92,11 +110,8 @@ def render_video(
         raise
     finally:
         # Cleanup temp files
-        import shutil
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(tmpdir)
-        except Exception:
-            pass
 
 
 def _create_gradient_background(output_path: str, color_index: int = 0, title: str = ""):
@@ -123,7 +138,7 @@ def _create_gradient_background(output_path: str, color_index: int = 0, title: s
         try:
             font_size = 60
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-        except (IOError, OSError):
+        except OSError:
             font = ImageFont.load_default()
 
         # Wrap title
@@ -162,16 +177,11 @@ def _build_filter_chain(srt_path: str, add_watermark: bool, duration: float) -> 
 
     # Watermark
     if add_watermark:
-        filters.append(
-            f"drawtext=text='{WATERMARK_TEXT}'"
-            f":fontcolor=white@0.5"
-            f":fontsize=32"
-            f":x=w-tw-30:y=30"
-        )
+        filters.append(f"drawtext=text='{WATERMARK_TEXT}':fontcolor=white@0.5:fontsize=32:x=w-tw-30:y=30")
 
     return ",".join(filters)
 
 
 def _hex_to_rgb(hex_color: str) -> tuple:
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))

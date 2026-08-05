@@ -67,9 +67,9 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Welcome back{user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}
+            Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
           </h1>
-          <p className="text-gray-500 text-sm mt-1">Here's what's happening with your content.</p>
+          <p className="text-gray-500 text-sm mt-1">Here&apos;s what&apos;s happening with your content.</p>
         </div>
         <Button asChild>
           <Link href="/projects/new">

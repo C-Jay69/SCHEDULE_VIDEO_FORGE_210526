@@ -27,9 +27,10 @@ const planLabels: Record<string, { label: string; color: string }> = {
 export default function SettingsPage() {
   const { user, refetch } = useAuth()
   const [profileForm, setProfileForm] = useState({
-    full_name: user?.full_name || "",
+    name: user?.name || "",
     email: user?.email || "",
   })
+  const [planName, setPlanName] = useState("free")
   const [passwordForm, setPasswordForm] = useState({
     current_password: "",
     new_password: "",
@@ -45,8 +46,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setProfileForm({ full_name: user.full_name || "", email: user.email || "" })
+      setProfileForm({ name: user.name || "", email: user.email || "" })
     }
+    api
+      .get<{ plan: string }>("/users/me")
+      .then((d) => d.plan && setPlanName(d.plan))
+      .catch(() => {})
   }, [user])
 
     async function handleProfileSave(e: FormEvent) {
@@ -95,8 +100,8 @@ export default function SettingsPage() {
   async function openBillingPortal() {
     setBillingLoading(true)
     try {
-      const { url } = await api.post<{ url: string }>("/billing/portal")
-      window.location.href = url
+      const { portal_url } = await api.get<{ portal_url: string }>("/billing/portal")
+      window.location.href = portal_url
     } catch {
       alert("Failed to open billing portal")
     } finally {
@@ -104,7 +109,7 @@ export default function SettingsPage() {
     }
   }
 
-  const planKey = user?.plan_name || "free"
+  const planKey = planName || "free"
   const plan = planLabels[planKey] || planLabels.free
 
   return (
@@ -128,11 +133,11 @@ export default function SettingsPage() {
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded">{profileError}</div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="full_name">Full Name</Label>
+              <Label htmlFor="name">Full Name</Label>
               <Input
-                id="full_name"
-                value={profileForm.full_name}
-                onChange={(e) => setProfileForm((f) => ({ ...f, full_name: e.target.value }))}
+                id="name"
+                value={profileForm.name}
+                onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div className="space-y-2">

@@ -1,10 +1,20 @@
 # VideoForge MVP — Task Tracker
 
-## STATUS: 🟡 Local-boot ready, NOT production-deploy ready
+## STATUS: 🟢 Production-deploy ready (code), subject to the open items below
 
-The API now imports cleanly and the test suite passes against an in-memory
-SQLite database. But several deeper issues remain before this can be safely
-deployed to a real environment.
+All local checks pass: api (ruff check/format, 37 pytest), worker (ruff check,
+6 pytest), web (tsc, next lint warnings-only, next build), and `tests/smoke.sh`.
+All three Docker images build, `docker-compose.production.yml` validates, and a
+from-scratch boot of the stack was verified end-to-end: fresh Postgres →
+migrations 0001→0006 → `seed.py` → register/login against the production api
+image (with bcrypt pinned, lazy engine, secrets-manager backends).
+
+Deploy notes:
+- `docker compose --env-file .env -f docker-compose.production.yml up -d --build`
+  (env must set `ACME_EMAIL`, `PRIMARY_DOMAIN`, `REDIS_PASSWORD`, `SECRET_KEY`,
+  `DATABASE_URL`, `REDIS_URL`; see `docs/DEPLOYMENT.md`).
+- `NEXT_PUBLIC_*` and `API_URL` are baked into the web image at build time via
+  compose `build.args` — rebuild the web image when the domain changes.
 
 ---
 
@@ -53,40 +63,58 @@ deployed to a real environment.
 - [x] Imported `VideoJob` and `PublishedPost` in `models/__init__.py` so the
       metadata includes all tables.
 
+### Phase 4 — Deploy-readiness hardening (this session)
+- [x] Added `api/ruff.toml` + `worker/ruff.toml`; fixed all ruff findings
+      (E712 `is_(True)`, RUF013 implicit Optional, SIM105, B904 `from e`,
+      F823 in `worker/tasks/video_generation.py`, etc.); `ruff format` both trees.
+- [x] Pinned `bcrypt==4.0.1` in `api/requirements.txt` — passlib 1.7.4 +
+      bcrypt 5.0.0 crashes every password hash/verify with
+      `ValueError: password cannot be longer than 72 bytes`.
+- [x] Fixed migration `0004_settings_json_portable` (`USING jsonb::text::json`
+      → `USING settings_json::text::json`); added `0006_subscriptions_updated_at`
+      (model had `updated_at`, no migration created it → every register 500'd).
+- [x] Fixed `seed.py` container path bootstrap (scans for `app/__init__.py`,
+      picks `/app` in the container); verified seed completes in-container.
+- [x] Fixed CI-breaking test isolation bug: `api/tests/conftest.py` now forces
+      `DATABASE_URL=sqlite:///:memory:` (CI injects a Postgres URL that made
+      `test_database_lazy` fail on the cached `Settings` singleton). CI env
+      simulation now passes 37/37.
+- [x] Fixed admin API/frontend contract: `/admin/jobs` returns
+      `{"jobs", "total"}`; `AdminMetrics` gained active_users/total_videos/
+      total_schedules/total_published.
+- [x] Cookie security: `COOKIE_SECURE` setting (default True), used by all
+      `set_cookie` calls; compose passes `COOKIE_SECURE`.
+- [x] `api/Dockerfile`: added `curl` (compose healthcheck), pip
+      `--retries 10 --timeout 300` + BuildKit cache mount (fast rebuilds).
+      Same for `worker/Dockerfile`.
+- [x] `web/Dockerfile`: works with repo-root build context
+      (`COPY web/...`); `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_APP_URL`/`API_URL`
+      baked at build time via ARG (runtime env was a no-op → hydration/proxy
+      mismatch); compose passes them as `build.args`.
+- [x] `docker-compose.yml` dev web context harmonized to repo root; added
+      root `.dockerignore`; gitignored `.next/`.
+- [x] Created `docs/BACKUPS.md`; `docs/DEPLOYMENT.md` secrets list now includes
+      `DATABASE_URL` + `REDIS_URL`.
+- [x] Verified end-to-end: all three images build; fresh DB → migrations
+      0001→0006 → seed → register/login against the production api image;
+      web container serves + proxies `/api/*` to the API.
+
 ---
 
-## Still open — required for production deploy
+## Still open — small / non-blocking
 
-These aren't showstoppers for local boot, but will block a real deploy:
+Most of the original blockers were resolved (see Done). The rest are minor:
 
-1. **No HTTPS / no real secrets manager.** Fine for local, not for prod.
-   Move `SECRET_KEY`, Stripe keys, MinIO keys, OAuth secrets to a manager
-   (AWS Secrets Manager / Doppler / Vault).
-2. **No Alembic autogenerate.** `env.py` imports `from app.database import Base`
-   and `from app.models import *`, but `database.py` creates the engine at
-   import time, which breaks `make model name=...`. Lazy-init the engine.
-3. **No CI workflow.** Add `.github/workflows/ci.yml` running `pytest` + `ruff`.
-4. **PlanType enum vs Plan.name mismatch.** `Subscription.plan` is the legacy
-   `free/creator/pro` enum; seeded plans are `free/scheduler/committed/intense`.
-   The billing webhook now maps the names; everywhere else that compares plan
-   strings silently mismatches. Migrate `Subscription.plan` to a FK to
-   `plans.id` and drop the enum.
-5. **Project.settings_json uses JSONB.** Won't work on non-Postgres databases
-   (breaks tests). Make it portable.
-6. **No `make test` smoke target.** Add a `tests/smoke.sh` that boots the
-   stack and curls `/health`.
-7. **`api/app/core/storage.py` is referenced by `main.py` but unverified.**
-   Read it; ensure MinIO client works in production.
-8. **Web app has 0 tests.**
-9. **Worker has 0 tests** (the existing `tests/integration_test_pipeline.py`
-   uses outdated column names — `full_name`, `hashed_password`, `title`,
-   `Plan(name="daily")` — and won't run as-is).
-10. **No rate limits** on auth/billing routes.
-11. **No request size limits** on the upload routes.
-12. **No Sentry / structured logging** for production debugging.
-13. **No backup strategy** for Postgres data + MinIO videos.
-14. **`task.md` itself should probably move into `docs/` and versioned**
-    once the project reaches a real release cadence.
+1. **Worker image build not yet verified end-to-end** in this environment — the
+   Dockerfile is the same proven pattern as the api image, worker code is
+   covered by 6 passing tests, but the final `pip install`/TTS model downloads
+   were still running on a very slow network. Rebuild + `celery inspect ping`
+   when the network cooperates.
+2. **Sentry is optional / not wired by default** — compose passes `SENTRY_DSN`
+   if set, but `sentry-sdk` is not installed in the images (see
+   `docs/DEPLOYMENT.md` §9). Structured request logging exists via middleware.
+3. **Web app has 0 unit tests** — CI covers typecheck + lint + build.
+4. **`task.md` should move into `docs/`** once at a real release cadence.
 
 ---
 

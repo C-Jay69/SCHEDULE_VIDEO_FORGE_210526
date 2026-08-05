@@ -11,12 +11,11 @@ import { Search, UserX, Shield, ShieldOff } from "lucide-react"
 interface AdminUser {
   id: string
   email: string
-  full_name: string
+  name: string
   role: "user" | "admin"
-  plan_name: string
+  plan: string
   is_active: boolean
   created_at: string
-  videos_count: number
 }
 
 const planColors: Record<string, string> = {
@@ -64,7 +63,7 @@ export default function AdminUsersPage() {
 
   const filtered = users.filter((u) => {
     const matchSearch = u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.full_name.toLowerCase().includes(search.toLowerCase())
+      (u.name || "").toLowerCase().includes(search.toLowerCase())
     const matchRole = roleFilter === "all" || u.role === roleFilter
     return matchSearch && matchRole
   })
@@ -97,7 +96,6 @@ export default function AdminUsersPage() {
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Plan</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Videos</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Joined</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
@@ -117,19 +115,18 @@ export default function AdminUsersPage() {
                 <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <div>
-                      <p className="font-medium text-gray-800">{u.full_name || "—"}</p>
+                      <p className="font-medium text-gray-800">{u.name || "—"}</p>
                       <p className="text-xs text-gray-400">{u.email}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge className={planColors[u.plan_name] || "bg-gray-100 text-gray-600"}>
-                      {u.plan_name}
+                    <Badge className={planColors[u.plan] || "bg-gray-100 text-gray-600"}>
+                      {u.plan}
                     </Badge>
                     {u.role === "admin" && (
                       <Badge className="ml-1 bg-red-100 text-red-700">admin</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{u.videos_count}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <Badge className={u.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}>

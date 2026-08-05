@@ -16,12 +16,12 @@ set SECRETS_BACKEND=aws and SECRETS_MANAGER_PREFIX=videoforge/prod/.
 
 All access is lazy + cached so a missing backend doesn't blow up at import.
 """
+
 from __future__ import annotations
 
 import functools
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def _backend() -> str:
 
 
 @functools.lru_cache(maxsize=256)
-def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
+def get_secret(key: str, default: str | None = None) -> str | None:
     """Resolve a secret value from the configured backend.
 
     Args:
@@ -48,7 +48,7 @@ def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
         The secret string, or `default` if no backend has it.
     """
     backend = _backend()
-    value: Optional[str] = None
+    value: str | None = None
 
     if backend == _BACKEND_FILE:
         value = _from_file(key)
@@ -64,21 +64,21 @@ def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
     return value
 
 
-def _from_file(key: str) -> Optional[str]:
+def _from_file(key: str) -> str | None:
     """Read a secret from a file. Used for Docker/Kubernetes secret mounts."""
     directory = os.getenv("SECRETS_DIR", "/run/secrets")
     path = os.path.join(directory, key)
     if not os.path.exists(path):
         return None
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return fh.read().strip()
     except OSError as exc:
         logger.warning("failed to read secret file %s: %s", path, exc)
         return None
 
 
-def _from_aws(key: str) -> Optional[str]:
+def _from_aws(key: str) -> str | None:
     """Read a secret from AWS Secrets Manager.
 
     Requires `boto3` (already in api/requirements.txt) and AWS credentials
@@ -86,7 +86,7 @@ def _from_aws(key: str) -> Optional[str]:
     """
     try:
         import boto3
-        from botocore.exceptions import ClientError, BotoCoreError
+        from botocore.exceptions import BotoCoreError, ClientError
     except ImportError:
         logger.error("boto3 not installed; cannot use AWS secrets backend")
         return None
@@ -150,6 +150,10 @@ _POPULATE_KEYS = (
     "OPENROUTER_API_KEY",
     "ADMIN_EMAIL",
     "ADMIN_PASSWORD",
+    "S3_BUCKET_NAME",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_ENDPOINT_URL",
 )
 
 
@@ -173,6 +177,8 @@ def populate_environ(keys: tuple[str, ...] = _POPULATE_KEYS) -> int:
             injected += 1
     logger.info(
         "secrets backend=%s injected=%d/%d",
-        backend, injected, len(keys),
+        backend,
+        injected,
+        len(keys),
     )
     return injected

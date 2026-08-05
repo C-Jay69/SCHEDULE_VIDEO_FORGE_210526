@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { api } from "@/lib/api"
+import { api, apiUrl } from "@/lib/api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,11 +16,11 @@ interface VideoItem {
   status: "pending" | "processing" | "completed" | "failed"
   platform: string
   format: string
-  duration: string
+  duration: number
   created_at: string
-  download_url?: string
+  storage_key?: string
+  stream_url?: string
   thumbnail_url?: string
-  published_at?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -38,8 +38,8 @@ export default function VideosPage() {
 
   const fetchVideos = useCallback(async () => {
     try {
-      const data = await api.get<VideoItem[]>("/videos")
-      setVideos(data)
+      const data = await api.get<{ videos: VideoItem[]; total: number }>("/videos")
+      setVideos(data.videos)
     } catch (e) {
       console.error(e)
     } finally {
@@ -164,9 +164,9 @@ export default function VideosPage() {
                       View
                     </Link>
                   </Button>
-                  {v.status === "completed" && v.download_url && (
+                  {v.status === "completed" && (
                     <Button asChild variant="outline" size="sm">
-                      <a href={v.download_url} download>
+                      <a href={apiUrl(`/videos/${v.id}/download`)} download>
                         <Download className="w-3.5 h-3.5 mr-1" />
                         Download
                       </a>

@@ -1,8 +1,9 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
-import logging
 
 from .core.secrets import populate_environ
 
@@ -11,9 +12,22 @@ from .core.secrets import populate_environ
 populate_environ()
 
 from .config import settings
-from .database import engine, Base
-from .routers import auth, projects, videos, schedules, oauth, billing, admin
+from .core.middleware import MaintenanceModeMiddleware, RequestLoggingMiddleware
 from .core.storage import ensure_bucket_exists
+from .database import SessionLocal, engine
+from .routers import (
+    admin,
+    auth,
+    billing,
+    oauth,
+    projects,
+    published,
+    schedules,
+    social,
+    templates,
+    users,
+    videos,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,15 +74,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Maintenance mode + request logging. Order matters: maintenance first so
+# it short-circuits before logging.
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(MaintenanceModeMiddleware)
 
 # Routers
 app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(videos.router, prefix="/api")
 app.include_router(schedules.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api")
+app.include_router(social.router, prefix="/api")
 app.include_router(billing.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(published.router, prefix="/api")
+app.include_router(templates.router, prefix="/api")
+
 
 @app.get("/health")
 async def health():
@@ -78,3 +101,22 @@ async def health():
 @app.get("/api/health")
 async def api_health():
     return {"status": "ok", "service": "videoforge-api"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe: verifies DB connectivity."""
+    from sqlalchemy import text
+
+    issues = []
+    try:
+        db = SessionLocal(bind=engine)
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception as exc:
+        issues.append(f"database: {exc}")
+
+    return JSONResponse(
+        status_code=200 if not issues else 503,
+        content={"status": "ready" if not issues else "not_ready", "issues": issues},
+    )

@@ -1,19 +1,21 @@
 """Initial migration
 
 Revision ID: 0001
-Revises: 
+Revises:
 Create Date: 2024-01-01 00:00:00.000000
 
 """
-from typing import Sequence, Union
-from alembic import op
+
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -35,10 +37,17 @@ def upgrade() -> None:
     op.create_table(
         "subscriptions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("stripe_subscription_id", sa.String(255), nullable=True),
         sa.Column("plan", sa.Enum("free", "creator", "pro", name="plantype"), nullable=False, server_default="free"),
-        sa.Column("status", sa.Enum("active", "canceled", "past_due", "trialing", "incomplete", name="subscriptionstatus"), nullable=False, server_default="active"),
+        sa.Column(
+            "status",
+            sa.Enum("active", "canceled", "past_due", "trialing", "incomplete", name="subscriptionstatus"),
+            nullable=False,
+            server_default="active",
+        ),
         sa.Column("period_end", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
@@ -47,9 +56,16 @@ def upgrade() -> None:
     op.create_table(
         "projects",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("topic", sa.Text(), nullable=False),
-        sa.Column("status", sa.Enum("draft", "processing", "completed", "failed", name="projectstatus"), nullable=False, server_default="draft"),
+        sa.Column(
+            "status",
+            sa.Enum("draft", "processing", "completed", "failed", name="projectstatus"),
+            nullable=False,
+            server_default="draft",
+        ),
         sa.Column("settings_json", postgresql.JSONB(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
@@ -58,9 +74,30 @@ def upgrade() -> None:
     op.create_table(
         "videos",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("status", sa.Enum("pending", "generating_script", "generating_voiceover", "generating_subtitles", "assembling", "completed", "failed", name="videostatus"), nullable=False, server_default="pending"),
+        sa.Column(
+            "project_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "pending",
+                "generating_script",
+                "generating_voiceover",
+                "generating_subtitles",
+                "assembling",
+                "completed",
+                "failed",
+                name="videostatus",
+            ),
+            nullable=False,
+            server_default="pending",
+        ),
         sa.Column("storage_key", sa.String(512), nullable=True),
         sa.Column("script_text", sa.Text(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -71,8 +108,15 @@ def upgrade() -> None:
     op.create_table(
         "video_jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("status", sa.Enum("pending", "running", "completed", "failed", "retrying", name="jobstatus"), nullable=False, server_default="pending"),
+        sa.Column(
+            "video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "status",
+            sa.Enum("pending", "running", "completed", "failed", "retrying", name="jobstatus"),
+            nullable=False,
+            server_default="pending",
+        ),
         sa.Column("progress_pct", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("celery_task_id", sa.String(255), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
@@ -83,11 +127,20 @@ def upgrade() -> None:
     op.create_table(
         "schedules",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("platform", sa.Enum("youtube", "instagram", "tiktok", "x", name="platformtype"), nullable=False),
         sa.Column("scheduled_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("status", sa.Enum("pending", "published", "failed", "cancelled", name="schedulestatus"), nullable=False, server_default="pending"),
+        sa.Column(
+            "status",
+            sa.Enum("pending", "published", "failed", "cancelled", name="schedulestatus"),
+            nullable=False,
+            server_default="pending",
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
@@ -95,10 +148,17 @@ def upgrade() -> None:
     op.create_table(
         "published_posts",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "video_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("platform", sa.String(50), nullable=False),
         sa.Column("platform_url", sa.String(512), nullable=True),
-        sa.Column("status", sa.Enum("pending", "published", "failed", name="poststatus"), nullable=False, server_default="pending"),
+        sa.Column(
+            "status",
+            sa.Enum("pending", "published", "failed", name="poststatus"),
+            nullable=False,
+            server_default="pending",
+        ),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
     )
@@ -107,7 +167,9 @@ def upgrade() -> None:
     op.create_table(
         "social_accounts",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("platform", sa.String(50), nullable=False),
         sa.Column("account_name", sa.String(255), nullable=True),
         sa.Column("access_token_encrypted", sa.Text(), nullable=True),
@@ -128,7 +190,9 @@ def upgrade() -> None:
     op.create_table(
         "admin_audit_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("admin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "admin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("action", sa.String(255), nullable=False),
         sa.Column("target", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),

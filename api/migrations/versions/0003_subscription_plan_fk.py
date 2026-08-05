@@ -19,8 +19,9 @@ What this does:
 Why two stages: a fresh database (no rows) is fine; a production database
 with existing rows would crash if we tried NOT NULL before backfilling.
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0003_subscription_plan_fk"
@@ -88,9 +89,7 @@ def upgrade() -> None:
     # falls back to the 'free' plan so the NOT NULL constraint can be applied.
     bind.execute(
         sa.text(
-            "UPDATE subscriptions AS s SET plan_id = p.id "
-            "FROM plans AS p "
-            "WHERE p.name = 'free' AND s.plan_id IS NULL"
+            "UPDATE subscriptions AS s SET plan_id = p.id FROM plans AS p WHERE p.name = 'free' AND s.plan_id IS NULL"
         )
     )
 

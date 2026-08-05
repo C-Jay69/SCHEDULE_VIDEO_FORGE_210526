@@ -89,7 +89,7 @@ clean:
 
 # ── Dev helpers ────────────────────────────────────────────────────────────────
 psql:
-	docker compose exec db psql -U postgres -d videoforge
+	docker compose exec postgres psql -U videoforge -d videoforge
 
 redis-cli:
 	docker compose exec redis redis-cli

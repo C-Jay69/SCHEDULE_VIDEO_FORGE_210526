@@ -11,10 +11,14 @@ import { Calendar, Clock, Trash2, Video } from "lucide-react"
 interface ScheduledPost {
   id: string
   video_id: string
-  video_title: string
   platform: string
   scheduled_at: string
   status: "pending" | "published" | "failed" | "cancelled"
+}
+
+interface VideoItem {
+  id: string
+  title: string
   thumbnail_url?: string
 }
 
@@ -27,12 +31,18 @@ const statusColors: Record<string, string> = {
 
 export default function SchedulePage() {
   const [posts, setPosts] = useState<ScheduledPost[]>([])
+  const [videos, setVideos] = useState<Record<string, VideoItem>>({})
   const [loading, setLoading] = useState(true)
 
   async function fetchPosts() {
     try {
-      const data = await api.get<ScheduledPost[]>("/schedule")
-      setPosts(data)
+      const data = await api.get<{ schedules: ScheduledPost[]; total: number }>("/schedules")
+      setPosts(data.schedules)
+      // Join against /videos to resolve titles/thumbnails
+      const vdata = await api.get<{ videos: VideoItem[]; total: number }>("/videos").catch(() => null)
+      if (vdata) {
+        setVideos(Object.fromEntries(vdata.videos.map((v) => [v.id, v])))
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -47,7 +57,7 @@ export default function SchedulePage() {
   async function handleCancel(id: string) {
     if (!confirm("Cancel this scheduled post?")) return
     try {
-      await api.delete(`/schedule/${id}`)
+      await api.delete(`/schedules/${id}`)
       fetchPosts()
     } catch (e) {
       alert("Failed to cancel")
@@ -102,13 +112,15 @@ export default function SchedulePage() {
           <div key={date}>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{date}</h2>
             <div className="space-y-2">
-              {datePosts.map((p) => (
+              {datePosts.map((p) => {
+                const video = videos[p.video_id]
+                return (
                 <Card key={p.id}>
                   <CardContent className="flex items-center gap-4 py-4">
                     {/* Thumbnail */}
                     <div className="w-16 h-10 rounded bg-gray-100 shrink-0 overflow-hidden">
-                      {p.thumbnail_url ? (
-                        <img src={p.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      {video?.thumbnail_url ? (
+                        <img src={video.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Video className="w-4 h-4 text-gray-300" />
@@ -118,7 +130,7 @@ export default function SchedulePage() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 truncate">{p.video_title}</p>
+                      <p className="font-medium text-gray-800 truncate">{video?.title || "Untitled video"}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <Clock className="w-3 h-3 text-gray-400" />
                         <span className="text-xs text-gray-400">
@@ -148,7 +160,8 @@ export default function SchedulePage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))

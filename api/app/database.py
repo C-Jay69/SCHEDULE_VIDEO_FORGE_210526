@@ -9,20 +9,21 @@ Backwards-compat: `from app.database import engine` still works because
 `engine` is a transparent proxy that delegates to the real SQLAlchemy Engine
 the first time anything on it is touched.
 """
+
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from .config import settings
 
 _engine_lock = threading.Lock()
-_engine: Optional[Engine] = None
+_engine: Engine | None = None
 
 
 def _build_engine() -> Engine:

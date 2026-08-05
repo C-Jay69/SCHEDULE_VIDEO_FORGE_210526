@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
@@ -36,7 +36,7 @@ export default function RegisterPage() {
     }
     setLoading(true)
     try {
-      await api.post("/auth/register", { full_name: fullName, email, password, plan })
+      await api.post("/auth/register", { name: fullName, email, password })
       await login({ email, password })
       router.push("/dashboard")
     } catch (err: any) {
@@ -136,5 +136,13 @@ export default function RegisterPage() {
         </CardFooter>
       </form>
     </Card>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterPageContent />
+    </Suspense>
   )
 }

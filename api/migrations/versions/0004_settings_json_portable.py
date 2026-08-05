@@ -18,8 +18,8 @@ don't use).
 The migration only does work when the underlying column is JSONB. SQLite
 runs no-op.
 """
+
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0004_settings_json_portable"
@@ -33,13 +33,10 @@ def upgrade() -> None:
     dialect = bind.dialect.name
 
     if dialect == "postgresql":
-        # ALTER COLUMN ... TYPE json USING jsonb::text::json is the standard
-        # JSONB -> JSON conversion. The USING clause is required because
-        # Postgres won't auto-coerce between the two.
-        op.execute(
-            "ALTER TABLE projects ALTER COLUMN settings_json "
-            "TYPE json USING jsonb::text::json"
-        )
+        # ALTER COLUMN ... TYPE json USING settings_json::text::json is the
+        # standard JSONB -> JSON conversion. The USING clause is required
+        # because Postgres won't auto-coerce between the two.
+        op.execute("ALTER TABLE projects ALTER COLUMN settings_json TYPE json USING settings_json::text::json")
     # SQLite / MySQL / etc.: the model change already reflects the new type.
     # Production was always Postgres, so this matches.
 
@@ -53,7 +50,4 @@ def downgrade() -> None:
     dialect = bind.dialect.name
 
     if dialect == "postgresql":
-        op.execute(
-            "ALTER TABLE projects ALTER COLUMN settings_json "
-            "TYPE jsonb USING settings_json::text::jsonb"
-        )
+        op.execute("ALTER TABLE projects ALTER COLUMN settings_json TYPE jsonb USING settings_json::text::jsonb")

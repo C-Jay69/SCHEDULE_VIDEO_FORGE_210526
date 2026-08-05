@@ -1,24 +1,25 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class VideoGenerateRequest(BaseModel):
     project_id: uuid.UUID
     topic: str
-    tone: Optional[str] = "engaging"
-    style: Optional[str] = "informational"
-    duration_seconds: Optional[int] = 60
-    settings: Optional[Dict[str, Any]] = {}
+    tone: str | None = "engaging"
+    style: str | None = "informational"
+    duration_seconds: int | None = 60
+    settings: dict[str, Any] | None = {}
 
 
 class VideoJobResponse(BaseModel):
     id: uuid.UUID
     status: str
     progress_pct: int
-    celery_task_id: Optional[str] = None
-    error: Optional[str] = None
+    celery_task_id: str | None = None
+    error: str | None = None
     created_at: datetime
 
     class Config:
@@ -30,17 +31,24 @@ class VideoResponse(BaseModel):
     project_id: uuid.UUID
     user_id: uuid.UUID
     status: str
-    storage_key: Optional[str] = None
-    script_text: Optional[str] = None
-    error_message: Optional[str] = None
+    storage_key: str | None = None
+    script_text: str | None = None
+    error_message: str | None = None
     created_at: datetime
-    download_url: Optional[str] = None
-    latest_job: Optional[VideoJobResponse] = None
+    download_url: str | None = None
+    latest_job: VideoJobResponse | None = None
+    # Convenience fields for the frontend detail/editor pages.
+    title: str | None = None
+    platform: str | None = None
+    format: str | None = None
+    duration: str | None = None
+    stream_url: str | None = None
+    schedule: dict | None = None
 
     class Config:
         from_attributes = True
 
 
 class VideoListResponse(BaseModel):
-    items: List[VideoResponse]
+    items: list[VideoResponse]
     total: int

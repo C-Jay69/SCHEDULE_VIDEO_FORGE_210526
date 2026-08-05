@@ -1,12 +1,18 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class ProjectCreate(BaseModel):
     topic: str
-    settings: Optional[Dict[str, Any]] = {}
+    settings: dict[str, Any] | None = {}
+
+
+class ProjectUpdate(BaseModel):
+    topic: str | None = None
+    settings: dict[str, Any] | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -14,7 +20,7 @@ class ProjectResponse(BaseModel):
     user_id: uuid.UUID
     topic: str
     status: str
-    settings_json: Optional[Dict[str, Any]] = {}
+    settings_json: dict[str, Any] | None = {}
     created_at: datetime
 
     class Config:
@@ -22,5 +28,5 @@ class ProjectResponse(BaseModel):
 
 
 class ProjectListResponse(BaseModel):
-    items: List[ProjectResponse]
+    items: list[ProjectResponse]
     total: int

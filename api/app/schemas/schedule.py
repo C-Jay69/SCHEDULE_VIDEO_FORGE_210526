@@ -1,13 +1,18 @@
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class ScheduleCreate(BaseModel):
     video_id: uuid.UUID
     platform: str
     scheduled_at: datetime
+
+
+class ScheduleUpdate(BaseModel):
+    platform: str | None = None
+    scheduled_at: datetime | None = None
 
 
 class ScheduleResponse(BaseModel):
@@ -24,5 +29,5 @@ class ScheduleResponse(BaseModel):
 
 
 class ScheduleListResponse(BaseModel):
-    items: List[ScheduleResponse]
+    items: list[ScheduleResponse]
     total: int

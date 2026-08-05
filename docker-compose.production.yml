@@ -45,14 +45,18 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      args:
+        # Baked into the client bundle at build time (see web/Dockerfile).
+        # Empty => the browser calls same-origin /api/* (proxied by Caddy).
+        - NEXT_PUBLIC_API_URL=https://${API_DOMAIN:-api.${PRIMARY_DOMAIN}}
+        - NEXT_PUBLIC_APP_URL=https://${PRIMARY_DOMAIN}
+        # Server-side /api/* rewrite target (baked at build time).
+        - API_URL=http://api:8000
     image: videoforge/web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_APP_URL=https://${PRIMARY_DOMAIN}
       - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
-      - NEXT_PUBLIC_API_URL=https://${API_DOMAIN:-api.${PRIMARY_DOMAIN}}
       - NEXTAUTH_SECRET=${SECRET_KEY}
-      - API_URL=http://api:8000
     networks: [videoforge]
 
   api:
@@ -70,6 +74,16 @@ services:
       - SECRETS_MANAGER_PREFIX=${SECRETS_MANAGER_PREFIX:-videoforge/prod/}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - SENTRY_DSN=${SENTRY_DSN:-}
+      # Storage — real S3 in production. These interpolate from the server      # .env and are also pulled from Secrets Manager by the secrets loader.
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      # CORS — the browser on PRIMARY_DOMAIN talks to this API directly.
+      - NEXT_PUBLIC_APP_URL=https://${PRIMARY_DOMAIN}
+      - CORS_ALLOWED_ORIGINS=https://${PRIMARY_DOMAIN}
+      # Auth cookies must be Secure in production (TLS terminated by Caddy).
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +108,11 @@ services:
       - SECRETS_MANAGER_PREFIX=${SECRETS_MANAGER_PREFIX:-videoforge/prod/}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - SENTRY_DSN=${SENTRY_DSN:-}
+      # Storage — same S3 settings as the API.
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
     depends_on:
       - api
       - redis

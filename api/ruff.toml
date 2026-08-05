@@ -1,0 +1,17 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "B008",  # FastAPI idiom: Depends()/Query()/Header() in argument defaults
+]
+
+[lint.per-file-ignores]
+# Re-export modules (intentional star imports)
+"app/models/__init__.py" = ["F401", "F403"]
+"app/routers/__init__.py" = ["F403"]
+"migrations/env.py" = ["F403"]
+# populate_environ() must run before app imports read env vars
+"app/main.py" = ["E402"]
+"app/database.py" = ["E402"]
+"migrations/**" = ["E501"]

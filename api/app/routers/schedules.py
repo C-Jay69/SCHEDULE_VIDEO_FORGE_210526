@@ -1,13 +1,20 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import uuid
+
+from ..core.security import get_current_user
 from ..database import get_db
+from ..models.schedule import Schedule, ScheduleStatus
+from ..models.subscription import Subscription
 from ..models.user import User
 from ..models.video import Video, VideoStatus
-from ..models.schedule import Schedule, ScheduleStatus, PlatformType
-from ..models.subscription import Subscription
-from ..schemas.schedule import ScheduleCreate, ScheduleResponse, ScheduleListResponse
-from ..core.security import get_current_user
+from ..schemas.schedule import (
+    ScheduleCreate,
+    ScheduleListResponse,
+    ScheduleResponse,
+    ScheduleUpdate,
+)
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
@@ -19,10 +26,14 @@ async def create_schedule(
     db: Session = Depends(get_db),
 ):
     # Check video ownership and completion
-    video = db.query(Video).filter(
-        Video.id == data.video_id,
-        Video.user_id == current_user.id,
-    ).first()
+    video = (
+        db.query(Video)
+        .filter(
+            Video.id == data.video_id,
+            Video.user_id == current_user.id,
+        )
+        .first()
+    )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     if video.status != VideoStatus.completed:
@@ -68,16 +79,70 @@ async def list_schedules(
     return ScheduleListResponse(items=[ScheduleResponse.model_validate(s) for s in items], total=total)
 
 
+@router.put("/{schedule_id}", response_model=ScheduleResponse)
+async def update_schedule(
+    schedule_id: uuid.UUID,
+    data: ScheduleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    schedule = (
+        db.query(Schedule)
+        .filter(
+            Schedule.id == schedule_id,
+            Schedule.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if schedule.status != ScheduleStatus.pending:
+        raise HTTPException(status_code=400, detail="Only pending schedules can be edited")
+
+    if data.scheduled_at is not None:
+        schedule.scheduled_at = data.scheduled_at
+    if data.platform is not None:
+        schedule.platform = data.platform
+    db.commit()
+    db.refresh(schedule)
+    return ScheduleResponse.model_validate(schedule)
+
+
+@router.delete("/{schedule_id}")
+async def delete_schedule(
+    schedule_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    schedule = (
+        db.query(Schedule)
+        .filter(
+            Schedule.id == schedule_id,
+            Schedule.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    schedule.status = ScheduleStatus.cancelled
+    db.commit()
+    return {"message": "Schedule cancelled"}
+
+
 @router.post("/{schedule_id}/publish-now", response_model=ScheduleResponse)
 async def publish_now(
     schedule_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    schedule = db.query(Schedule).filter(
-        Schedule.id == schedule_id,
-        Schedule.user_id == current_user.id,
-    ).first()
+    schedule = (
+        db.query(Schedule)
+        .filter(
+            Schedule.id == schedule_id,
+            Schedule.user_id == current_user.id,
+        )
+        .first()
+    )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     if schedule.status != ScheduleStatus.pending:
@@ -86,6 +151,7 @@ async def publish_now(
     # Dispatch publishing task
     try:
         from worker.celery_app import celery_app
+
         celery_app.send_task(
             "tasks.publishing.publish_video",
             args=[str(schedule.id)],

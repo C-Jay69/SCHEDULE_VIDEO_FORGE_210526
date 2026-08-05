@@ -1,38 +1,39 @@
+import logging
 import os
 import sys
-import logging
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "api"))
+
+from app.config import settings
 
 from celery_app import celery_app
 from db import get_db_session
 
 logger = logging.getLogger(__name__)
 
-MINIO_BUCKET = os.getenv("MINIO_BUCKET", "videoforge")
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
-
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
 
 
 def download_video_from_minio(storage_key: str, dest_path: str):
     from minio import Minio
+
     client = Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=MINIO_SECURE,
+        settings.storage_endpoint,
+        access_key=settings.storage_access_key,
+        secret_key=settings.storage_secret_key,
+        secure=settings.storage_secure,
+        region=settings.aws_region if settings.aws_access_key_id or settings.s3_bucket_name else None,
     )
-    client.fget_object(MINIO_BUCKET, storage_key, dest_path)
+    client.fget_object(settings.storage_bucket, storage_key, dest_path)
 
 
 def get_decrypted_token(encrypted: str) -> str:
+    import base64
+    import hashlib
+
     from cryptography.fernet import Fernet
-    import base64, hashlib
+
     key = hashlib.sha256(SECRET_KEY.encode()).digest()
     fernet_key = base64.urlsafe_b64encode(key)
     f = Fernet(fernet_key)
@@ -51,9 +52,10 @@ def publish_video(self, schedule_id: str):
     db = get_db_session()
 
     try:
+        from app.models.published_post import PostStatus, PublishedPost
         from app.models.schedule import Schedule, ScheduleStatus
-        from app.models.published_post import PublishedPost, PostStatus
         from app.models.social_account import SocialAccount
+
         from pipeline.text_generation import generate_title_and_tags
 
         schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -69,12 +71,14 @@ def publish_video(self, schedule_id: str):
         if not video or not video.storage_key:
             raise RuntimeError("Video file not ready")
 
-        platform = schedule.platform.value if hasattr(schedule.platform, 'value') else schedule.platform
+        platform = schedule.platform.value if hasattr(schedule.platform, "value") else schedule.platform
         logger.info(f"Publishing video {video.id} to {platform}")
 
         # Get metadata
         topic = video.project.topic if video.project else "video"
-        meta = generate_title_and_tags(topic)
+        import asyncio
+
+        meta = asyncio.run(generate_title_and_tags(topic))
 
         # Handle non-YouTube platforms (manual export)
         if platform != "youtube":
@@ -105,7 +109,11 @@ def publish_video(self, schedule_id: str):
 
         # Decrypt tokens
         access_token = get_decrypted_token(social_account.access_token_encrypted)
-        refresh_token = get_decrypted_token(social_account.refresh_token_encrypted) if social_account.refresh_token_encrypted else None
+        refresh_token = (
+            get_decrypted_token(social_account.refresh_token_encrypted)
+            if social_account.refresh_token_encrypted
+            else None
+        )
 
         # Download video
         tmpdir = tempfile.mkdtemp()
@@ -114,7 +122,11 @@ def publish_video(self, schedule_id: str):
 
         # Upload to YouTube
         from pipeline.connectors.youtube import YouTubeConnector
+
         connector = YouTubeConnector(access_token=access_token, refresh_token=refresh_token)
+        from pipeline.orchestrator import orchestrator
+
+        orchestrator.register_connector("youtube", connector)
 
         # Refresh token if needed
         if not connector.validate_token():
@@ -123,6 +135,7 @@ def publish_video(self, schedule_id: str):
                 raise RuntimeError("YouTube token expired and refresh failed")
             # Save new token
             from app.core.encryption import encrypt_token
+
             social_account.access_token_encrypted = encrypt_token(new_token)
             db.commit()
 
@@ -148,19 +161,21 @@ def publish_video(self, schedule_id: str):
 
         # Cleanup
         import shutil
+
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     except Exception as exc:
         logger.error(f"Publishing failed for schedule {schedule_id}: {exc}", exc_info=True)
         try:
+            from app.models.published_post import PostStatus, PublishedPost
             from app.models.schedule import Schedule, ScheduleStatus
-            from app.models.published_post import PublishedPost, PostStatus
+
             schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
             if schedule:
                 schedule.status = ScheduleStatus.failed
                 post = PublishedPost(
                     video_id=schedule.video_id,
-                    platform=schedule.platform.value if hasattr(schedule.platform, 'value') else schedule.platform,
+                    platform=schedule.platform.value if hasattr(schedule.platform, "value") else schedule.platform,
                     status=PostStatus.failed,
                     error_message=str(exc),
                 )
@@ -170,7 +185,7 @@ def publish_video(self, schedule_id: str):
             logger.error(f"Failed to record publish failure: {db_err}")
 
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=120)
+            raise self.retry(exc=exc, countdown=120) from None
         raise
 
     finally:
@@ -185,6 +200,7 @@ def process_scheduled():
     db = get_db_session()
     try:
         from app.models.schedule import Schedule, ScheduleStatus
+
         now = datetime.now(timezone.utc)
         due = (
             db.query(Schedule)

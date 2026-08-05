@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Secrets — never ship into image layers or build context
+.env
+.env.*
+!.env.example
+
+# Python
+**/venv
+**/.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# Node
+**/node_modules
+web/.next
+**/.next
+
+# Local / editor
+.vscode
+.idea
+.DS_Store
+*.log
+
+# Build artifacts

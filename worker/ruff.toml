@@ -1,0 +1,12 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "B008",  # FastAPI idiom: Depends()/Query()/Header() in argument defaults
+]
+
+[lint.per-file-ignores]
+# celery_app.py may need to configure logging/env before importing app modules
+"celery_app.py" = ["E402"]
+"tests/**" = ["E501"]

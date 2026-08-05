@@ -1,26 +1,27 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
+
 from .connectors.base import BaseConnector
-from .connectors.youtube import YouTubeConnector
-from .connectors.instagram import InstagramConnector
-from .connectors.tiktok import TikTokConnector
-from .connectors.x import XConnector
 
 logger = logging.getLogger(__name__)
+
 
 class PublishingOrchestrator:
     """
     Coordinates the publishing process across different social platforms.
     Decides whether to attempt direct API publishing or use the fallback method.
     """
+
     def __init__(self):
-        self._connectors: Dict[str, BaseConnector] = {}
+        self._connectors: dict[str, BaseConnector] = {}
 
     def register_connector(self, platform: str, connector: BaseConnector):
         self._connectors[platform] = connector
         logger.info(f"Registered connector: {platform}")
 
-    async def publish_video(self, platform: str, video_path: str, title: str, description: str, tags: list) -> Dict[str, Any]:
+    async def publish_video(
+        self, platform: str, video_path: str, title: str, description: str, tags: list
+    ) -> dict[str, Any]:
         """
         Main entry point to publish a video.
         """
@@ -34,7 +35,7 @@ class PublishingOrchestrator:
                 "platform_id": None,
                 "url": None,
                 "fallback_package_path": None,
-                "error_message": error_msg
+                "error_message": error_msg,
             }
 
         try:
@@ -48,14 +49,14 @@ class PublishingOrchestrator:
                         "platform_id": None,
                         "url": None,
                         "fallback_package_path": None,
-                        "error_message": "Authentication failed. Please reconnect your account."
+                        "error_message": "Authentication failed. Please reconnect your account.",
                     }
                 # In a real app, we would update the DB with the new token here
 
             # 2. Attempt to publish
             logger.info(f"Starting publishing flow for {platform}...")
             result = connector.publish(video_path, title, description, tags)
-            
+
             # 3. Log results
             if result["status"] == "published":
                 logger.info(f"Successfully published to {platform}: {result['url']}")
@@ -73,8 +74,9 @@ class PublishingOrchestrator:
                 "platform_id": None,
                 "url": None,
                 "fallback_package_path": None,
-                "error_message": str(e)
+                "error_message": str(e),
             }
+
 
 # Global orchestrator instance
 orchestrator = PublishingOrchestrator()

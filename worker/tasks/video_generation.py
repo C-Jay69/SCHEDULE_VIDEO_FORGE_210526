@@ -1,42 +1,34 @@
-import os
-import sys
+import contextlib
 import logging
-import tempfile
+import os
 import shutil
-import json
+import sys
+import tempfile
 from datetime import datetime, timezone
 
 # Add api to python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "api"))
 
-from celery_app import celery_app
-from db import get_db_session
+from app.config import settings
+from app.models.schedule import Schedule
+from app.models.usage import UsageEvent
+from app.models.user import User
 
 # Models
 from app.models.video import Video, VideoStatus
-from app.models.video_job import VideoJob, JobStatus
-from app.models.user import User
-from app.models.usage import UsageEvent
-from app.models.schedule import Schedule
-from app.models.project import Project
+from app.models.video_job import JobStatus, VideoJob
+
+from celery_app import celery_app
+from db import get_db_session
+from pipeline.orchestrator import orchestrator as publish_orchestrator
 
 # Pipeline Components
 from pipeline.text_generation import orchestrator as text_orchestrator
-from pipeline.tts import generate_voiceover
-from pipeline.stt import generate_subtitles
-from pipeline.video_render import render_video
-from pipeline.orchestrator import orchestrator as publish_orchestrator
 
 logger = logging.getLogger(__name__)
 
-MINIO_BUCKET = os.getenv("MINIO_BUCKET", "videoforge")
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
-
-def update_job_progress(db, job, status: str, progress: int, error: str = None):
+def update_job_progress(db, job, status: str, progress: int, error: str | None = None):
     """Update job status and progress. Idempotent."""
     job.status = JobStatus(status)
     job.progress_pct = progress
@@ -45,7 +37,9 @@ def update_job_progress(db, job, status: str, progress: int, error: str = None):
     db.commit()
 
 
-def update_video_status(db, video, status: str, error: str = None, script: str = None, storage_key: str = None):
+def update_video_status(
+    db, video, status: str, error: str | None = None, script: str | None = None, storage_key: str | None = None
+):
     """Update video record."""
     video.status = VideoStatus(status)
     if error:
@@ -58,17 +52,19 @@ def update_video_status(db, video, status: str, error: str = None, script: str =
 
 
 def upload_to_minio(file_path: str, object_name: str) -> str:
-    """Upload file to MinIO storage."""
+    """Upload file to MinIO/S3 storage."""
     from minio import Minio
+
     client = Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=MINIO_SECURE,
+        settings.storage_endpoint,
+        access_key=settings.storage_access_key,
+        secret_key=settings.storage_secret_key,
+        secure=settings.storage_secure,
+        region=settings.aws_region if settings.aws_access_key_id or settings.s3_bucket_name else None,
     )
-    if not client.bucket_exists(MINIO_BUCKET):
-        client.make_bucket(MINIO_BUCKET)
-    client.fput_object(MINIO_BUCKET, object_name, file_path, content_type="video/mp4")
+    if not client.bucket_exists(settings.storage_bucket):
+        client.make_bucket(settings.storage_bucket)
+    client.fput_object(settings.storage_bucket, object_name, file_path, content_type="video/mp4")
     return object_name
 
 
@@ -105,14 +101,15 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
         tone = settings.get("tone", "engaging")
         style = settings.get("style", "informational")
         duration_seconds = settings.get("duration_seconds", 60)
-        add_watermark = (plan == "free")
+        add_watermark = plan == "free"
 
-    # ── STEP 1: THE BRAIN (Text Generation) ──────────────────────────
+        # ── STEP 1: THE BRAIN (Text Generation) ──────────────────────────
         logger.info(f"[{video_id}] Phase 1: Generating script and metadata...")
         update_job_progress(db, job, "running", 5)
         update_video_status(db, video, "generating_script")
 
         import asyncio
+
         # Get script
         script = asyncio.run(text_orchestrator.generate_script(topic, tone, style, duration_seconds))
         # Get metadata (Title, Tags, etc)
@@ -129,13 +126,15 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
 
         audio_path = os.path.join(tmpdir, "voiceover.wav")
         from pipeline.tts import generate_voiceover
+
         generate_voiceover(script, audio_path)
-        
+
         logger.info(f"[{video_id}] Generating subtitles...")
         srt_path = os.path.join(tmpdir, "subtitles.srt")
         from pipeline.stt import generate_subtitles
+
         generate_subtitles(audio_path, srt_path)
-        
+
         update_job_progress(db, job, "running", 50)
         logger.info(f"[{video_id}] Audio and subtitles ready.")
 
@@ -146,6 +145,7 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
 
         output_path = os.path.join(tmpdir, f"{video_id}.mp4")
         from pipeline.video_render import render_video
+
         render_video(
             audio_path=audio_path,
             srt_path=srt_path,
@@ -166,39 +166,46 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
 
         # ── STEP 5: SOCIAL (Publishing/Fallback) ─────────────────────────
         logger.info(f"[{video_id}] Phase 5: Handling social publishing...")
-        
+
         # Check if there is a scheduled post for this video
         schedule = db.query(Schedule).filter(Schedule.video_id == video_id).first()
-        
+
         if schedule:
             logger.info(f"[{video_id}] Found schedule for platform: {schedule.platform}")
             # In a real production app, we would use the user's OAuth tokens stored in the DB
             # For this implementation, we'll assume the connector is initialized with user tokens
             # (Mocking token retrieval for now)
             platform = schedule.platform
-            token = "mock_token" 
-            
+            token = "mock_token"
+
             # Get the platform connector (this would usually be via a factory)
-            from pipeline.connectors.youtube import YouTubeConnector
             from pipeline.connectors.instagram import InstagramConnector
             from pipeline.connectors.tiktok import TikTokConnector
             from pipeline.connectors.x import XConnector
+            from pipeline.connectors.youtube import YouTubeConnector
 
             connector = None
-            if platform == "youtube": connector = YouTubeConnector(token)
-            elif platform == "instagram": connector = InstagramConnector(token)
-            elif platform == "tiktok": connector = TikTokConnector(token)
-            elif platform == "x": connector = XConnector(token)
+            if platform == "youtube":
+                connector = YouTubeConnector(token)
+            elif platform == "instagram":
+                connector = InstagramConnector(token)
+            elif platform == "tiktok":
+                connector = TikTokConnector(token)
+            elif platform == "x":
+                connector = XConnector(token)
 
             if connector:
                 import asyncio
-                publish_result = asyncio.run(publish_orchestrator.publish_video(
-                    platform=platform,
-                    video_path=output_path,
-                    title=metadata.get('title', topic),
-                    description=metadata.get('description', ""),
-                    tags=metadata.get('tags', [])
-                ))
+
+                publish_result = asyncio.run(
+                    publish_orchestrator.publish_video(
+                        platform=platform,
+                        video_path=output_path,
+                        title=metadata.get("title", topic),
+                        description=metadata.get("description", ""),
+                        tags=metadata.get("tags", []),
+                    )
+                )
 
                 if publish_result["status"] == "published":
                     logger.info(f"[{video_id}] 🎉 SUCCESS: Published to {platform}")
@@ -206,7 +213,9 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
                     schedule.status = "published"
                     # (In a real app, we'd save the platform_id and URL to published_posts table)
                 elif publish_result["status"] == "fallback_needed":
-                    logger.info(f"[{video_id}] 📦 FALLBACK: Package created at {publish_result['fallback_package_path']}")
+                    logger.info(
+                        f"[{video_id}] 📦 FALLBACK: Package created at {publish_result['fallback_package_path']}"
+                    )
                     # Handle the fallback logic (e.g., notify user)
                 else:
                     logger.error(f"[{video_id}] ❌ FAILED: {publish_result['error_message']}")
@@ -215,20 +224,20 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
 
         # ── STEP 6: ACCOUNTING (Usage & Credits) ─────────────────────────
         logger.info(f"[{video_id}] Phase 6: Updating usage and credits...")
-        
+
         # 1. Log the usage event
         usage_event = UsageEvent(
             user_id=user.id,
             event_type="video_generation",
             quantity=1,
-            metadata_json={"video_id": str(video_id), "topic": topic}
+            metadata_json={"video_id": str(video_id), "topic": topic},
         )
         db.add(usage_event)
-        
+
         # 2. Subtract credits (Logic would depend on plan)
         # Note: In a real system, this would be a complex calculation based on plan limits
         # For now, we just record that the event happened.
-        
+
         update_job_progress(db, job, "running", 98)
 
         # ── FINALIZATION ────────────────────────────────────────────────
@@ -239,8 +248,6 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
     except Exception as exc:
         logger.exception(f"[{video_id}] 💥 PIPELINE CRASHED: {exc}")
         try:
-            from app.models.video import Video
-            from app.models.video_job import VideoJob
             video = db.query(Video).filter(Video.id == video_id).first()
             job = db.query(VideoJob).filter(VideoJob.id == job_id).first()
             if video:
@@ -251,12 +258,10 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
             logger.error(f"Failed to update failure status: {db_err}")
 
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
+            raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1)) from None
         raise
 
     finally:
         db.close()
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(tmpdir)
-        except Exception:
-            pass

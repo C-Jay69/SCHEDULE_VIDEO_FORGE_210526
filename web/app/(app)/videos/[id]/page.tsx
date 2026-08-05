@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { api } from "@/lib/api"
+import { api, apiUrl } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,12 +17,11 @@ interface VideoDetail {
   status: string
   platform: string
   format: string
-  duration: string
+  duration: number
   created_at: string
-  download_url?: string
+  storage_key?: string
   stream_url?: string
   thumbnail_url?: string
-  published_at?: string
   schedule?: {
     id: string
     scheduled_at: string
@@ -147,16 +146,16 @@ export default function VideoDetailPage() {
           <div><span className="text-gray-500">Format</span><p className="font-medium mt-0.5">{video.format}</p></div>
           <div><span className="text-gray-500">Duration</span><p className="font-medium mt-0.5">{video.duration}</p></div>
           <div><span className="text-gray-500">Created</span><p className="font-medium mt-0.5">{new Date(video.created_at).toLocaleString()}</p></div>
-          {video.published_at && (
-            <div><span className="text-gray-500">Published</span><p className="font-medium mt-0.5">{new Date(video.published_at).toLocaleString()}</p></div>
+          {video.schedule && (
+            <div><span className="text-gray-500">Scheduled</span><p className="font-medium mt-0.5">{new Date(video.schedule.scheduled_at).toLocaleString()}</p></div>
           )}
         </CardContent>
       </Card>
 
       {/* Actions */}
-      {video.status === "completed" && video.download_url && (
+      {video.status === "completed" && (
         <Button asChild variant="outline" className="w-full">
-          <a href={video.download_url} download>
+          <a href={apiUrl(`/videos/${id}/download`)} download>
             <Download className="w-4 h-4 mr-2" />
             Download Video
           </a>
@@ -164,7 +163,7 @@ export default function VideoDetailPage() {
       )}
 
       {/* Schedule */}
-      {video.status === "completed" && !video.published_at && (
+      {video.status === "completed" && !video.schedule && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -173,17 +172,7 @@ export default function VideoDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {video.schedule ? (
-              <div className="text-sm space-y-1">
-                <p className="text-gray-600">
-                  Scheduled for{" "}
-                  <span className="font-semibold">{new Date(video.schedule.scheduled_at).toLocaleString()}</span>{" "}
-                  on <span className="capitalize font-semibold">{video.schedule.platform}</span>
-                </p>
-                <Badge className={statusColors[video.schedule.status]}>{video.schedule.status}</Badge>
-              </div>
-            ) : (
-              <form onSubmit={handleSchedule} className="space-y-4">
+            <form onSubmit={handleSchedule} className="space-y-4">
                 {scheduleError && (
                   <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded">
                     {scheduleError}
@@ -228,7 +217,6 @@ export default function VideoDetailPage() {
                   )}
                 </Button>
               </form>
-            )}
           </CardContent>
         </Card>
       )}

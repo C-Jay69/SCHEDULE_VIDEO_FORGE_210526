@@ -1,11 +1,12 @@
-import os
 import logging
-from typing import Optional, Dict, Any
-from .base import BaseConnector, PlatformResult
+import os
+
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from google.auth.transport.requests import Request
+
+from .base import BaseConnector, PlatformResult
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 class YouTubeConnector(BaseConnector):
     platform_name = "youtube"
 
-    def __init__(self, access_token: str, refresh_token: Optional[str] = None):
+    def __init__(self, access_token: str, refresh_token: str | None = None):
         super().__init__(access_token, refresh_token)
         self._service = None
 
@@ -43,7 +44,7 @@ class YouTubeConnector(BaseConnector):
             logger.warning(f"YouTube token validation failed: {e}")
             return False
 
-    def refresh_access_token(self) -> Optional[str]:
+    def refresh_access_token(self) -> str | None:
         try:
             credentials = Credentials(
                 token=self.access_token,
@@ -103,7 +104,7 @@ class YouTubeConnector(BaseConnector):
                 "platform_id": video_id,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
                 "fallback_package_path": None,
-                "error_message": None
+                "error_message": None,
             }
 
         except Exception as e:
@@ -113,5 +114,5 @@ class YouTubeConnector(BaseConnector):
                 "platform_id": None,
                 "url": None,
                 "fallback_package_path": None,
-                "error_message": str(e)
+                "error_message": str(e),
             }
