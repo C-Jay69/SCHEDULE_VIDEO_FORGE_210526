@@ -38,8 +38,8 @@ export default function VideosPage() {
 
   const fetchVideos = useCallback(async () => {
     try {
-      const data = await api.get<{ videos: VideoItem[]; total: number }>("/videos")
-      setVideos(data.videos)
+      const data = await api.get<{ items: VideoItem[]; total: number }>("/videos")
+      setVideos(data.items ?? [])
     } catch (e) {
       console.error(e)
     } finally {
