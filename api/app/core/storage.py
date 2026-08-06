@@ -61,6 +61,27 @@ def get_presigned_url(object_name: str, expires_hours: int = 24) -> str:
         object_name,
         expires=timedelta(hours=expires_hours),
     )
+    # MinIO's client signs against the internal endpoint (e.g. `minio:9000`),
+    # which browsers can't resolve. Re-sign against the public endpoint so the
+    # URL is playable/downloadable from the browser — the `host` header is part
+    # of the SigV4 signature, so rewriting the host after signing would 403.
+    public = settings.storage_public_endpoint
+    if public:
+        from urllib.parse import urlparse
+
+        if "://" in public:
+            public = urlparse(public).netloc
+        pub_client = Minio(
+            public,
+            access_key=settings.storage_access_key,
+            secret_key=settings.storage_secret_key,
+            secure=settings.storage_secure,
+        )
+        url = pub_client.presigned_get_object(
+            settings.storage_bucket,
+            object_name,
+            expires=timedelta(hours=expires_hours),
+        )
     return url
 
 
@@ -75,3 +96,19 @@ def delete_file(object_name: str):
 def download_file(object_name: str, dest_path: str):
     client = get_minio_client()
     client.fget_object(settings.storage_bucket, object_name, dest_path)
+
+
+def get_object_size(object_name: str) -> int:
+    client = get_minio_client()
+    return client.stat_object(settings.storage_bucket, object_name).size
+
+
+def get_object_reader(object_name: str, offset: int | None = None, length: int | None = None):
+    """Return a streamable object reader. Supports optional byte ranges.
+
+    The caller owns the returned stream and must close it when done.
+    """
+    client = get_minio_client()
+    if offset is not None:
+        return client.get_object(settings.storage_bucket, object_name, offset=offset, length=length)
+    return client.get_object(settings.storage_bucket, object_name)

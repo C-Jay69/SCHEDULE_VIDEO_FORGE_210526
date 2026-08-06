@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Eye, RefreshCw, Search, Video, Plus } from "lucide-react"
+import { Download, Eye, RefreshCw, Search, Video, Plus, Trash2 } from "lucide-react"
 
 interface VideoItem {
   id: string
@@ -59,6 +59,16 @@ export default function VideosPage() {
     const matchesStatus = statusFilter === "all" || v.status === statusFilter
     return matchesSearch && matchesStatus
   })
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Delete this video? This cannot be undone.")) return
+    try {
+      await api.delete(`/videos/${id}`)
+      setVideos((prev) => prev.filter((v) => v.id !== id))
+    } catch (err: any) {
+      alert(err.message || "Failed to delete video")
+    }
+  }
 
   if (loading) {
     return (
@@ -172,6 +182,9 @@ export default function VideosPage() {
                       </a>
                     </Button>
                   )}
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(v.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>

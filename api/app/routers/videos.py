@@ -2,12 +2,13 @@ import contextlib
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..core.security import get_current_user
-from ..core.storage import get_presigned_url
+from ..core.storage import delete_file, get_object_reader, get_object_size
 from ..database import get_db
 from ..models.plan import Plan
 from ..models.project import Project
@@ -62,14 +63,13 @@ def get_videos_this_month(user_id, db: Session) -> int:
 
 def enrich_video(video: Video, db: Session) -> VideoResponse:
     latest_job = db.query(VideoJob).filter(VideoJob.video_id == video.id).order_by(VideoJob.created_at.desc()).first()
-    download_url = None
-    if video.storage_key:
-        with contextlib.suppress(Exception):
-            download_url = get_presigned_url(video.storage_key)
 
     resp = VideoResponse.model_validate(video)
-    resp.download_url = download_url
-    resp.stream_url = download_url
+    # Browser playback goes through the authenticated /stream endpoint
+    # (same-origin, via the Next.js /api proxy) rather than a presigned URL,
+    # which would point at the internal MinIO host unreachable from browsers.
+    resp.stream_url = f"/api/videos/{video.id}/stream"
+    resp.download_url = None
     if latest_job:
         resp.latest_job = VideoJobResponse.model_validate(latest_job)
 
@@ -214,9 +214,36 @@ async def get_video_status(
 @router.get("/{video_id}/download")
 async def download_video(
     video_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    return _stream_video_file(video_id, request, current_user, db, as_attachment=True)
+
+
+@router.get("/{video_id}/stream")
+async def stream_video(
+    video_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _stream_video_file(video_id, request, current_user, db, as_attachment=False)
+
+
+def _stream_video_file(
+    video_id: uuid.UUID,
+    request: Request,
+    current_user: User,
+    db: Session,
+    as_attachment: bool,
+):
+    """Stream a video file from storage with HTTP Range support.
+
+    Browsers can't reach the internal MinIO host, so playback/download is
+    proxied through the authenticated API. Range requests get a 206 partial
+    response, enabling seeking in the HTML5 player.
+    """
     video = (
         db.query(Video)
         .filter(
@@ -230,8 +257,49 @@ async def download_video(
     if not video.storage_key:
         raise HTTPException(status_code=404, detail="Video file not ready")
 
-    url = get_presigned_url(video.storage_key, expires_hours=1)
-    return {"download_url": url}
+    total = get_object_size(video.storage_key)
+    media_type = "video/mp4"
+    headers = {"Accept-Ranges": "bytes"}
+    if as_attachment:
+        filename = f"videoforge-{video_id}.mp4"
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    range_header = request.headers.get("range")
+    parsed = _parse_range(range_header, total)
+    if parsed:
+        start, end, length = parsed
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        headers["Content-Length"] = str(length)
+        return StreamingResponse(
+            get_object_reader(video.storage_key, offset=start, length=length),
+            status_code=206,
+            headers=headers,
+            media_type=media_type,
+        )
+
+    headers["Content-Length"] = str(total)
+    return StreamingResponse(
+        get_object_reader(video.storage_key),
+        status_code=200,
+        headers=headers,
+        media_type=media_type,
+    )
+
+
+def _parse_range(range_header: str | None, total: int) -> tuple[int, int, int] | None:
+    """Parse a single `bytes=start-end` range into (start, end, length)."""
+    if not range_header or not range_header.startswith("bytes="):
+        return None
+    try:
+        start_str, end_str = range_header[len("bytes=") :].split("-", 1)
+        start = int(start_str) if start_str else 0
+        end = int(end_str) if end_str else total - 1
+    except ValueError:
+        return None
+    if start < 0 or start >= total:
+        return None
+    end = min(end, total - 1)
+    return start, end, end - start + 1
 
 
 @router.post("/{video_id}/regenerate", response_model=VideoResponse)
@@ -336,6 +404,9 @@ async def delete_video(
     )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    if video.storage_key:
+        with contextlib.suppress(Exception):
+            delete_file(video.storage_key)
     db.delete(video)
     db.commit()
     return {"message": "Video deleted"}

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # MinIO (local dev) — production should set the AWS S3 aliases below,
     # which take precedence and let the same MinIO client talk to S3.
     minio_endpoint: str = "minio:9000"
+    # Browser-reachable base for presigned URLs. MinIO runs on the Docker
+    # network as `minio:9000` (unreachable from a browser), so presigned URLs
+    # must be rewritten to a public host, e.g. http://localhost:9000.
+    minio_public_endpoint: str = ""
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin123"
     minio_bucket: str = "videoforge"
@@ -124,6 +128,17 @@ class Settings(BaseSettings):
         if self.aws_access_key_id or self.s3_bucket_name:
             return True
         return self.minio_secure
+
+    @property
+    def storage_public_endpoint(self) -> str:
+        """Host used for presigned URLs handed to browsers.
+
+        For MinIO (dev) this is minio_public_endpoint; S3 presigned URLs
+        already carry a public host, so nothing is rewritten there.
+        """
+        if self.aws_access_key_id or self.s3_bucket_name:
+            return ""
+        return self.minio_public_endpoint
 
     class Config:
         env_file = ".env"

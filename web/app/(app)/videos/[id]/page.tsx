@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, ArrowLeft, Calendar, Send, Loader2, RefreshCw } from "lucide-react"
+import { Download, ArrowLeft, Calendar, Send, Loader2, RefreshCw, Trash2 } from "lucide-react"
 
 interface VideoDetail {
   id: string
@@ -86,6 +86,16 @@ export default function VideoDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!window.confirm("Delete this video? This cannot be undone.")) return
+    try {
+      await api.delete(`/videos/${id}`)
+      router.push("/videos")
+    } catch (err: any) {
+      alert(err.message || "Failed to delete video")
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -114,10 +124,11 @@ export default function VideoDetailPage() {
       {/* Video preview */}
       <Card>
         <CardContent className="p-0 overflow-hidden rounded-xl">
-          {video.stream_url ? (
+          {video.status === "completed" && video.storage_key ? (
             <video
-              src={video.stream_url}
+              src={apiUrl(`/videos/${id}/stream`)}
               controls
+              autoPlay
               className="w-full aspect-video bg-black"
               poster={video.thumbnail_url}
             />
@@ -161,6 +172,15 @@ export default function VideoDetailPage() {
           </a>
         </Button>
       )}
+
+      <Button
+        variant="outline"
+        className="w-full text-red-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
+        onClick={handleDelete}
+      >
+        <Trash2 className="w-4 h-4 mr-2" />
+        Delete Video
+      </Button>
 
       {/* Schedule */}
       {video.status === "completed" && !video.schedule && (
