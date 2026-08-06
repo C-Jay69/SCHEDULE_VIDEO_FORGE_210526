@@ -157,13 +157,38 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
                 from pipeline.magichour import generate_video_from_audio
                 from pipeline.tts import get_audio_duration
 
+                # 720p is paid-tier only; free tiers reject it with a 422 and
+                # support 480p. Prefer the configured resolution (if any) and
+                # degrade through 720p → 480p before giving up.
+                resolutions = []
+                configured = os.getenv("MAGIC_HOUR_RESOLUTION")
+                if configured:
+                    resolutions.append(configured)
+                resolutions.extend(r for r in ("720p", "480p") if r not in resolutions)
+
                 audio_duration = get_audio_duration(audio_path)
-                visuals_path = generate_video_from_audio(
-                    audio_path=audio_path,
-                    prompt=_build_visual_prompt(topic, script),
-                    output_dir=tmpdir,
-                    end_seconds=audio_duration,
-                )
+                last_exc: Exception | None = None
+                for resolution in resolutions:
+                    try:
+                        visuals_path = generate_video_from_audio(
+                            audio_path=audio_path,
+                            prompt=_build_visual_prompt(topic, script),
+                            output_dir=tmpdir,
+                            end_seconds=audio_duration,
+                            resolution=resolution,
+                        )
+                        if visuals_path:
+                            break
+                    except Exception as exc:
+                        last_exc = exc
+                        logger.warning(
+                            f"[{video_id}] Magic Hour {resolution} failed: {exc}"
+                        )
+                if not visuals_path:
+                    logger.warning(
+                        f"[{video_id}] Magic Hour visuals unavailable, "
+                        f"falling back to gradient render: {last_exc}"
+                    )
             except Exception as exc:
                 logger.warning(
                     f"[{video_id}] Magic Hour visuals unavailable, falling back to gradient render: {exc}"

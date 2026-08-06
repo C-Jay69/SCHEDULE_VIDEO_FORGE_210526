@@ -45,7 +45,7 @@ def generate_video_from_audio(
     prompt: str,
     output_dir: str,
     end_seconds: float,
-    resolution: str = "720p",
+    resolution: str = "480p",
     name: str = "VideoForge",
 ) -> str:
     """Generate AI visuals for a voiceover via Magic Hour audio-to-video.
