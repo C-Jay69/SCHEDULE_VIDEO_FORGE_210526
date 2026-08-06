@@ -93,3 +93,24 @@ Stage Summary:
 - Single `bun run dev` command launches everything (frontend + backend API routes)
 - Real AI visuals replace the original static gradient background
 - The "YouTube-player-like screen" issue is fixed - videos now have unique AI-generated scene imagery
+---
+Task ID: 6
+Agent: Main
+Task: Fix database path issue and admin login credentials
+
+Work Log:
+- Identified root cause: .env had absolute path (/home/z/my-project/db/custom.db) which fails on other machines
+- .env was gitignored so cloned repos had no database config at all
+- Changed DATABASE_URL to relative path: file:./db/custom.db
+- Created .env.example (committed to repo) with the relative path
+- Updated .gitignore to allow .env.example while keeping .env private
+- Added db/.gitkeep so the directory structure exists in git
+- Added mkdirSync in db.ts to auto-create db directory at runtime
+- Created prisma/seed.ts to auto-create admin user on fresh installs
+- Added postinstall and setup scripts that: create db dir, copy .env.example, generate Prisma client, push schema, seed admin
+- Added db/*.db and /upload/ to .gitignore
+
+Stage Summary:
+- Admin credentials: admin@videoforge.dev / admin123
+- Fresh clone workflow: git clone → npm install (or bun install) → npm run dev
+- postinstall auto-creates: .env file, db directory, database schema, admin user

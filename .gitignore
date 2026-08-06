@@ -31,7 +31,18 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Database files
+/db/*.db
+/db/*.db-journal
+!/db/.gitkeep
+
+# Uploads (generated at runtime)
+/upload/
 
 # vercel
 .vercel
