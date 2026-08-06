@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.2"
 
+    # Magic Hour (AI video generation). Optional — when set, the worker renders
+    # AI visuals for videos via the audio-to-video API instead of a static
+    # gradient background.
+    magic_hour_api_key: str = ""
+
     # Piper
     piper_model_path: str = "/app/models/en_US-lessac-medium.onnx"
 

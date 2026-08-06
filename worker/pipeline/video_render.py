@@ -158,7 +158,74 @@ def _create_gradient_background(output_path: str, color_index: int = 0, title: s
     img.save(output_path, "PNG")
 
 
-def _build_filter_chain(srt_path: str, add_watermark: bool, duration: float) -> str:
+def assemble_with_visuals(
+    visuals_path: str,
+    srt_path: str,
+    output_path: str,
+    add_watermark: bool = True,
+) -> str:
+    """Burn captions/watermark onto an AI-generated visuals clip (e.g. from
+    Magic Hour) and normalize it to 9:16 short-form (1080x1920).
+
+    Keeps the clip's own audio track (the voiceover). Falls back to the
+    gradient render when no visuals file is available.
+    """
+    if not visuals_path or not os.path.exists(visuals_path):
+        logger.info("No visuals clip provided — using gradient render")
+        raise FileNotFoundError(visuals_path)
+
+    tmpdir = tempfile.mkdtemp()
+
+    try:
+        filters = _build_filter_chain(
+            srt_path=srt_path,
+            add_watermark=add_watermark,
+            duration=None,
+        )
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            visuals_path,
+            "-vf",
+            filters,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+
+        logger.info(f"Running FFmpeg (visuals + captions): {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+
+        if result.returncode != 0:
+            logger.error(f"FFmpeg error:\n{result.stderr}")
+            raise RuntimeError(f"FFmpeg failed: {result.stderr[-500:]}")
+
+        logger.info(f"Video rendered with visuals: {output_path}")
+        return output_path
+
+    except Exception as e:
+        logger.error(f"Visuals assembly failed: {e}")
+        raise
+    finally:
+        with contextlib.suppress(Exception):
+            shutil.rmtree(tmpdir)
+
+
+def _build_filter_chain(srt_path: str, add_watermark: bool, duration: float | None = None) -> str:
     """Build FFmpeg -vf filter string."""
     filters = [f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=decrease"]
     filters.append(f"pad={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2")

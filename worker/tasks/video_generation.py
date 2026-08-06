@@ -28,6 +28,14 @@ from pipeline.text_generation import orchestrator as text_orchestrator
 logger = logging.getLogger(__name__)
 
 
+def _build_visual_prompt(topic: str, script: str) -> str:
+    """Build a focused Magic Hour visual prompt from the topic + script."""
+    excerpt = " ".join((script or "").split())[:400]
+    if excerpt:
+        return f"{topic}. {excerpt}"
+    return topic
+
+
 def update_job_progress(db, job, status: str, progress: int, error: str | None = None):
     """Update job status and progress. Idempotent."""
     job.status = JobStatus(status)
@@ -139,21 +147,53 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
         update_job_progress(db, job, "running", 50)
         logger.info(f"[{video_id}] Audio and subtitles ready.")
 
+        # ── STEP 2.5: VISUALS (Magic Hour AI video generation) ──────────
+        # If a Magic Hour API key is configured, generate real AI footage from
+        # the voiceover (audio-to-video). Falls back to the gradient render.
+        visuals_path = None
+        if os.getenv("MAGIC_HOUR_API_KEY"):
+            logger.info(f"[{video_id}] Phase 2.5: Generating AI visuals via Magic Hour...")
+            try:
+                from pipeline.magichour import generate_video_from_audio
+                from pipeline.tts import get_audio_duration
+
+                audio_duration = get_audio_duration(audio_path)
+                visuals_path = generate_video_from_audio(
+                    audio_path=audio_path,
+                    prompt=_build_visual_prompt(topic, script),
+                    output_dir=tmpdir,
+                    end_seconds=audio_duration,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"[{video_id}] Magic Hour visuals unavailable, falling back to gradient render: {exc}"
+                )
+
         # ── STEP 3: ASSEMBLY (Video Rendering) ──────────────────────────
         logger.info(f"[{video_id}] Phase 3: Rendering video...")
         update_video_status(db, video, "assembling")
         update_job_progress(db, job, "running", 65)
 
         output_path = os.path.join(tmpdir, f"{video_id}.mp4")
-        from pipeline.video_render import render_video
+        if visuals_path:
+            from pipeline.video_render import assemble_with_visuals
 
-        render_video(
-            audio_path=audio_path,
-            srt_path=srt_path,
-            output_path=output_path,
-            topic=topic,
-            add_watermark=add_watermark,
-        )
+            assemble_with_visuals(
+                visuals_path=visuals_path,
+                srt_path=srt_path,
+                output_path=output_path,
+                add_watermark=add_watermark,
+            )
+        else:
+            from pipeline.video_render import render_video
+
+            render_video(
+                audio_path=audio_path,
+                srt_path=srt_path,
+                output_path=output_path,
+                topic=topic,
+                add_watermark=add_watermark,
+            )
         update_job_progress(db, job, "running", 85)
         logger.info(f"[{video_id}] Video assembly complete.")
 

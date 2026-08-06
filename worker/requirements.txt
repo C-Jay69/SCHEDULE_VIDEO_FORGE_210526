@@ -16,3 +16,4 @@ google-auth-oauthlib==1.2.0
 google-api-python-client==2.129.0
 requests==2.31.0
 piper-tts==1.2.0
+magic_hour==0.73.0
