@@ -23,6 +23,7 @@ export async function getCurrentUser(): Promise<{
   email: string;
   name: string | null;
   plan: string;
+  isAdmin: boolean;
 } | null> {
   const headersList = await headers();
   const auth = headersList.get("authorization");
@@ -30,7 +31,7 @@ export async function getCurrentUser(): Promise<{
   const token = auth.slice(7);
   const user = await db.user.findFirst({
     where: { token },
-    select: { id: true, email: true, name: true, plan: true },
+    select: { id: true, email: true, name: true, plan: true, isAdmin: true },
   });
   return user;
 }
@@ -40,6 +41,7 @@ export async function requireAuth(): Promise<{
   email: string;
   name: string | null;
   plan: string;
+  isAdmin: boolean;
 }> {
   const user = await getCurrentUser();
   if (!user) {

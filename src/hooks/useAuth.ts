@@ -8,6 +8,7 @@ interface UserInfo {
   email: string;
   name: string | null;
   plan: string;
+  isAdmin: boolean;
 }
 
 export function useAuth() {
