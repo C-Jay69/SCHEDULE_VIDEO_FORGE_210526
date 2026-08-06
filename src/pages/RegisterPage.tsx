@@ -34,7 +34,8 @@ export function RegisterPage({ onNavigate }: RegisterPageProps) {
     setLoading(true);
     try {
       await register({ email, password, name: name || undefined });
-      onNavigate("dashboard");
+      // Navigation to dashboard is handled by the auth guard in Home
+      // (it auto-redirects authenticated users away from auth routes)
     } catch (err: any) {
       setError(err.message || "Registration failed");
     } finally {

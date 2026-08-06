@@ -114,3 +114,20 @@ Stage Summary:
 - Admin credentials: admin@videoforge.dev / admin123
 - Fresh clone workflow: git clone → npm install (or bun install) → npm run dev
 - postinstall auto-creates: .env file, db directory, database schema, admin user
+---
+Task ID: 7
+Agent: Main
+Task: Fix login redirect race condition
+
+Work Log:
+- Diagnosed race condition: login() calls setUser() (queued React state) then onNavigate() sets hash (immediate DOM mutation)
+- Hash change triggers re-render BEFORE React flushes setUser update
+- Auth guard sees user=null + hash=#/dashboard → thinks unauthenticated on protected route → redirects to #/login
+- Fix: Removed manual onNavigate("dashboard") from LoginPage and RegisterPage submit handlers
+- The auth guard effect in Home already handles redirecting authenticated users away from auth routes
+- Now only setUser() runs, React flushes it, then the auth guard correctly sees user is set and redirects
+
+Stage Summary:
+- Root cause: race between React state batching and immediate DOM hash mutation
+- Fix: let the auth guard effect handle all post-auth navigation
+- Login and register now work correctly without the redirect loop

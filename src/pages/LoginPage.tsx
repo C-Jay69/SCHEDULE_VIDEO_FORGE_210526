@@ -33,7 +33,8 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
     setLoading(true);
     try {
       await login({ email, password });
-      onNavigate("dashboard");
+      // Navigation to dashboard is handled by the auth guard in Home
+      // (it auto-redirects authenticated users away from auth routes)
     } catch (err: any) {
       setError(err.message || "Invalid email or password");
     } finally {
