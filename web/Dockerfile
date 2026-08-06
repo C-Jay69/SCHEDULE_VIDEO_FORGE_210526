@@ -20,7 +20,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 # API_URL drives the server-side /api/* rewrite in next.config.js, which is
 # also compiled into the build — bake it for the target backend.
-ARG API_URL=http://api:8000
+ARG API_URL=http://api:8011
 ENV API_URL=$API_URL
 RUN npm run build
 

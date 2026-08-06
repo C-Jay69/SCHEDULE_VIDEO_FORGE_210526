@@ -12,7 +12,7 @@ const nextConfig = {
     },
   },
   async rewrites() {
-    const apiUrl = process.env.API_URL || "http://localhost:8000";
+    const apiUrl = process.env.API_URL || "http://localhost:8011";
     return [
       {
         source: "/api/:path*",

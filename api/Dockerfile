@@ -18,8 +18,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY api/ .
 COPY seed.py /seed.py
 
-EXPOSE 8000
+EXPOSE 8011
 
 # Production by default. Set DEV=1 to enable --reload for local development.
 # WORKERS controls the uvicorn worker count in production mode.
-CMD ["sh", "-c", "if [ \"$DEV\" = \"1\" ]; then exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload; else exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-2}; fi"]
+CMD ["sh", "-c", "if [ \"$DEV\" = \"1\" ]; then exec uvicorn app.main:app --host 0.0.0.0 --port 8011 --reload; else exec uvicorn app.main:app --host 0.0.0.0 --port 8011 --workers ${WORKERS:-2}; fi"]

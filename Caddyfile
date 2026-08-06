@@ -33,7 +33,7 @@
 
     @api path /api/*
     handle @api {
-        reverse_proxy api:8000 {
+        reverse_proxy api:8011 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}
@@ -43,7 +43,7 @@
 
     # Health probe (also exposed at /health on api directly)
     handle /health {
-        reverse_proxy api:8000
+        reverse_proxy api:8011
     }
 
     # Security headers
@@ -65,7 +65,7 @@
 # Optional: dedicated api subdomain
 {$API_DOMAIN:api.{$PRIMARY_DOMAIN}} {
     encode zstd gzip
-    reverse_proxy api:8000 {
+    reverse_proxy api:8011 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
@@ -73,7 +73,7 @@
     }
 
     handle /health {
-        reverse_proxy api:8000
+        reverse_proxy api:8011
     }
 
     header {

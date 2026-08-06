@@ -60,8 +60,8 @@ make seed         # seeds plans, admin user, system settings
 
 App is running at:
 - **Web** → http://localhost:3000
-- **API docs** → http://localhost:8000/docs
-- **API redoc** → http://localhost:8000/redoc
+- **API docs** → http://localhost:8011/docs
+- **API redoc** → http://localhost:8011/redoc
 
 ### 3. Connect Stripe (optional for payments)
 
@@ -159,7 +159,7 @@ videoforge-mvp/
 ## Architecture
 
 ```
-Browser → Next.js (3000) → /api/* proxy → FastAPI (8000)
+Browser → Next.js (3000) → /api/* proxy → FastAPI (8011)
                                                 ↓
                                           PostgreSQL
                                           Redis (task queue)

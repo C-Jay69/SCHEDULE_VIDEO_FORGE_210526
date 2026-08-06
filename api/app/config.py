@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # App
     secret_key: str = secrets.token_urlsafe(32)
-    app_url: str = "http://localhost:8000"
+    app_url: str = "http://localhost:8011"
     next_public_app_url: str = "http://localhost:3000"
     # Comma-separated extra origins for CORS in addition to app_url + localhost:3000
     cors_allowed_origins: str = ""
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # YouTube
     youtube_client_id: str = ""
     youtube_client_secret: str = ""
-    youtube_redirect_uri: str = "http://localhost:8000/api/oauth/youtube/callback"
+    youtube_redirect_uri: str = "http://localhost:8011/api/oauth/youtube/callback"
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
