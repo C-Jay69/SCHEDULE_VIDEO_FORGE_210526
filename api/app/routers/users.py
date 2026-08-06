@@ -13,7 +13,7 @@ from ..models.schedule import Schedule, ScheduleStatus
 from ..models.social_account import SocialAccount
 from ..models.subscription import Subscription
 from ..models.usage import UsageEvent
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..models.video import Video
 from ..models.video_job import JobStatus, VideoJob
 from ..schemas.auth import UserUpdate
@@ -80,13 +80,14 @@ async def get_usage(
     # Rough estimate: assume ~5MB per generated video file.
     storage_used_mb = videos_total * 5
 
+    is_admin = current_user.role == UserRole.admin
     return UsageSummary(
         videos_generated=videos_generated,
-        videos_limit=plan.video_limit_monthly if plan else 3,
+        videos_limit=-1 if is_admin else (plan.video_limit_monthly if plan else 3),
         storage_used_mb=storage_used_mb,
-        storage_limit_mb=(plan.storage_limit_gb * 1024) if plan else 1024,
+        storage_limit_mb=-1 if is_admin else ((plan.storage_limit_gb * 1024) if plan else 1024),
         motion_credits_used=motion_credits_used,
-        motion_credits_limit=plan.motion_credits_monthly if plan else 0,
+        motion_credits_limit=-1 if is_admin else (plan.motion_credits_monthly if plan else 0),
     )
 
 
@@ -172,7 +173,7 @@ async def get_dashboard_stats(
 
     return DashboardStats(
         videos_generated=videos_generated,
-        videos_limit=plan.video_limit_monthly if plan else 3,
+        videos_limit=-1 if current_user.role == UserRole.admin else (plan.video_limit_monthly if plan else 3),
         scheduled_posts=scheduled_posts,
         published_posts=published_posts,
         failed_jobs=failed_jobs,

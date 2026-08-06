@@ -13,7 +13,7 @@ from ..models.plan import Plan
 from ..models.project import Project
 from ..models.schedule import Schedule, ScheduleStatus
 from ..models.subscription import Subscription
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..models.video import Video, VideoStatus
 from ..models.video_job import JobStatus, VideoJob
 from ..schemas.schedule import ScheduleCreate, ScheduleResponse
@@ -110,7 +110,7 @@ async def generate_video(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Check plan limits
+    # Check plan limits (admins are exempt from the paywall)
     sub = (
         db.query(Subscription)
         .filter(Subscription.user_id == current_user.id)
@@ -118,13 +118,14 @@ async def generate_video(
         .first()
     )
     plan = sub.plan_name if sub else "free"
-    limit = get_user_plan_limit(plan, db)
-    count = get_videos_this_month(current_user.id, db)
-    if count >= limit:
-        raise HTTPException(
-            status_code=402,
-            detail=f"Monthly video limit reached ({limit}). Please upgrade your plan.",
-        )
+    if current_user.role != UserRole.admin:
+        limit = get_user_plan_limit(plan, db)
+        count = get_videos_this_month(current_user.id, db)
+        if count >= limit:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Monthly video limit reached ({limit}). Please upgrade your plan.",
+            )
 
     # Create video record
     video = Video(

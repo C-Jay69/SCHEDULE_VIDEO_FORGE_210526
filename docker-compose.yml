@@ -58,6 +58,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./worker:/app
+      - ./api/app:/app/app
       - piper_models:/app/models
     healthcheck:
       test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
@@ -120,8 +121,8 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+    # No host port published: the api/worker reach it over the internal Docker
+    # network as `ollama:11434`. (A host-native Ollama already owns :11434.)
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped

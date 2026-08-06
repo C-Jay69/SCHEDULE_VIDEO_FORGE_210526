@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "api"))
 from app.config import settings
 from app.models.schedule import Schedule
 from app.models.usage import UsageEvent
-from app.models.user import User
+from app.models.user import User, UserRole
 
 # Models
 from app.models.video import Video, VideoStatus
@@ -101,7 +101,8 @@ def generate_video(self, video_id: str, job_id: str, topic: str, settings: dict)
         tone = settings.get("tone", "engaging")
         style = settings.get("style", "informational")
         duration_seconds = settings.get("duration_seconds", 60)
-        add_watermark = plan == "free"
+        # Admins are exempt from the free-plan watermark paywall.
+        add_watermark = plan == "free" and user.role != UserRole.admin
 
         # ── STEP 1: THE BRAIN (Text Generation) ──────────────────────────
         logger.info(f"[{video_id}] Phase 1: Generating script and metadata...")

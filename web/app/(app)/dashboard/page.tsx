@@ -59,7 +59,8 @@ export default function DashboardPage() {
     )
   }
 
-  const usagePct = stats ? Math.min((stats.videos_generated / (stats.videos_limit || 1)) * 100, 100) : 0
+  const isUnlimited = (stats?.videos_limit ?? 0) < 0
+  const usagePct = stats && !isUnlimited ? Math.min((stats.videos_generated / (stats.videos_limit || 1)) * 100, 100) : 0
 
   return (
     <div className="space-y-8">
@@ -111,11 +112,13 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-xl font-bold">
               {stats?.videos_generated ?? 0}
-              {stats?.videos_limit ? (
+              {isUnlimited ? (
+                <span className="text-sm text-gray-400 font-normal"> / Unlimited</span>
+              ) : stats?.videos_limit ? (
                 <span className="text-sm text-gray-400 font-normal"> / {stats.videos_limit}</span>
               ) : null}
             </div>
-            {stats?.videos_limit && (
+            {!isUnlimited && stats?.videos_limit && (
               <Progress value={usagePct} className="mt-2 h-1.5" />
             )}
           </CardContent>

@@ -69,6 +69,16 @@ TEST_USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "testpass123!")
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
+def _env_or_none(name):
+    """Return the env var as-is, or None if unset/blank.
+
+    Stripe price IDs are a unique nullable column; empty strings would collide
+    across plans ('' != NULL), so blank env vars must become NULL.
+    """
+    value = os.getenv(name, "").strip()
+    return value or None
+
 from app.models.user import User, UserRole  # noqa: E402
 from app.models.plan import Plan  # noqa: E402
 from app.models.system_settings import SystemSettings  # noqa: E402
@@ -82,7 +92,7 @@ SessionLocal = sessionmaker(bind=engine)
 PLAN_DEFS = [
     {
         "name": "free",
-        "stripe_price_id": os.getenv("STRIPE_FREE_PRICE_ID"),
+        "stripe_price_id": _env_or_none("STRIPE_FREE_PRICE_ID"),
         "video_limit_monthly": 4,
         "storage_limit_gb": 1,
         "motion_credits_monthly": 0,
@@ -92,7 +102,7 @@ PLAN_DEFS = [
     },
     {
         "name": "scheduler",
-        "stripe_price_id": os.getenv("STRIPE_SCHEDULER_PRICE_ID"),
+        "stripe_price_id": _env_or_none("STRIPE_SCHEDULER_PRICE_ID"),
         "video_limit_monthly": 13,  # ~3/week
         "storage_limit_gb": 10,
         "motion_credits_monthly": 27,
@@ -102,7 +112,7 @@ PLAN_DEFS = [
     },
     {
         "name": "committed",
-        "stripe_price_id": os.getenv("STRIPE_COMMITTED_PRICE_ID"),
+        "stripe_price_id": _env_or_none("STRIPE_COMMITTED_PRICE_ID"),
         "video_limit_monthly": 30,  # once/day
         "storage_limit_gb": 50,
         "motion_credits_monthly": 62,
@@ -112,7 +122,7 @@ PLAN_DEFS = [
     },
     {
         "name": "intense",
-        "stripe_price_id": os.getenv("STRIPE_INTENSE_PRICE_ID"),
+        "stripe_price_id": _env_or_none("STRIPE_INTENSE_PRICE_ID"),
         "video_limit_monthly": 62,  # twice/day
         "storage_limit_gb": 200,
         "motion_credits_monthly": 124,

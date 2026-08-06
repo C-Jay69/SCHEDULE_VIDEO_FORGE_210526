@@ -7,7 +7,7 @@ from ..core.security import get_current_user
 from ..database import get_db
 from ..models.schedule import Schedule, ScheduleStatus
 from ..models.subscription import Subscription
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..models.video import Video, VideoStatus
 from ..schemas.schedule import (
     ScheduleCreate,
@@ -39,7 +39,7 @@ async def create_schedule(
     if video.status != VideoStatus.completed:
         raise HTTPException(status_code=400, detail="Video must be completed before scheduling")
 
-    # Check plan — only creator+ can auto-publish to YouTube
+    # Check plan — only creator+ can auto-publish to YouTube (admins exempt)
     sub = (
         db.query(Subscription)
         .filter(Subscription.user_id == current_user.id)
@@ -47,7 +47,7 @@ async def create_schedule(
         .first()
     )
     plan = sub.plan_name if sub else "free"
-    if data.platform == "youtube" and plan == "free":
+    if data.platform == "youtube" and plan == "free" and current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=402,
             detail="YouTube auto-publish requires Creator or Pro plan",
