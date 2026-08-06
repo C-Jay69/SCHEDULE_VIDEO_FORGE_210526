@@ -14,7 +14,7 @@ function RegisterPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
-  const plan = searchParams.get("plan") || "free"
+  const plan = searchParams.get("plan") || "starter"
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
@@ -47,10 +47,10 @@ function RegisterPageContent() {
   }
 
   const planLabels: Record<string, string> = {
-    free: "Free",
-    scheduler: "Scheduler — $15/mo",
-    committed: "Committed — $30/mo",
-    intense: "Intense — $55/mo",
+    starter: "Starter — Free",
+    creator: "Creator — $19/mo",
+    pro: "Pro — $49/mo",
+    agency: "Agency — $149/mo",
   }
 
   return (
@@ -58,7 +58,7 @@ function RegisterPageContent() {
       <CardHeader>
         <CardTitle className="text-2xl">Create your account</CardTitle>
         <CardDescription>
-          {plan !== "free" ? (
+          {plan !== "starter" ? (
             <>Selected plan: <span className="font-semibold text-violet-600">{planLabels[plan]}</span></>
           ) : (
             "Start for free — no credit card required"

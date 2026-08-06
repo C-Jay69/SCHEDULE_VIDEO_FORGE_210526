@@ -18,7 +18,14 @@ class PlanResponse(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    plan: str  # The name of the plan from the DB (e.g., "scheduler", "daily")
+    plan: str  # The name of the plan from the DB (e.g., "creator", "pro")
+    success_url: str | None = None
+    cancel_url: str | None = None
+
+
+class AddonCheckoutRequest(BaseModel):
+    product_key: str  # One of the add-on catalog keys, e.g. "motion_credits"
+    quantity: int = 1
     success_url: str | None = None
     cancel_url: str | None = None
 

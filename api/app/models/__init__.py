@@ -12,6 +12,7 @@ from .published_post import PublishedPost
 from .schedule import Schedule
 
 # Deploy-phase additions
+from .addon_grant import AddonGrant
 from .session import Session
 from .social_account import SocialAccount
 from .subscription import Subscription

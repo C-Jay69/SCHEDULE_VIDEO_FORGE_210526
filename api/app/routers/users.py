@@ -62,7 +62,7 @@ async def get_usage(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = db.query(Plan).filter(Plan.name == (sub.plan_name if sub else "free")).first()
+    plan = db.query(Plan).filter(Plan.name == (sub.plan_name if sub else "starter")).first()
 
     now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -129,7 +129,7 @@ async def get_dashboard_stats(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan_name = sub.plan_name if sub else "free"
+    plan_name = sub.plan_name if sub else "starter"
     plan = db.query(Plan).filter(Plan.name == plan_name).first()
 
     now = datetime.now(timezone.utc)

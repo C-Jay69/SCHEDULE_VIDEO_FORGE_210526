@@ -26,10 +26,10 @@ interface DashboardStats {
 }
 
 const planColors: Record<string, string> = {
-  free: "bg-gray-100 text-gray-700",
-  scheduler: "bg-blue-100 text-blue-700",
-  committed: "bg-violet-100 text-violet-700",
-  intense: "bg-purple-100 text-purple-700",
+  starter: "bg-gray-100 text-gray-700",
+  creator: "bg-blue-100 text-blue-700",
+  pro: "bg-violet-100 text-violet-700",
+  agency: "bg-purple-100 text-purple-700",
 }
 
 const statusColors: Record<string, string> = {
@@ -91,8 +91,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold capitalize">{stats?.plan_name || "Free"}</span>
-              <Badge className={planColors[stats?.plan_name || "free"]}>
+              <span className="text-xl font-bold capitalize">{stats?.plan_name || "Starter"}</span>
+              <Badge className={planColors[stats?.plan_name || "starter"]}>
                 {stats?.plan_status || "active"}
               </Badge>
             </div>

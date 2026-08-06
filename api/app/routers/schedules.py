@@ -46,8 +46,8 @@ async def create_schedule(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = sub.plan_name if sub else "free"
-    if data.platform == "youtube" and plan == "free" and current_user.role != UserRole.admin:
+    plan = sub.plan_name if sub else "starter"
+    if data.platform == "youtube" and plan == "starter" and current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=402,
             detail="YouTube auto-publish requires Creator or Pro plan",
@@ -150,7 +150,7 @@ async def publish_now(
 
     # Dispatch publishing task
     try:
-        from worker.celery_app import celery_app
+        from app.celery_app import celery_app
 
         celery_app.send_task(
             "tasks.publishing.publish_video",

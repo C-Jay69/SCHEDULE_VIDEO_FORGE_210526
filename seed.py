@@ -1,7 +1,7 @@
 """
 Idempotent seed script — run after migrations.
 
-Seeds: admin user, test user, plans (free/scheduler/committed/intense),
+Seeds: admin user, test user, plans (starter/creator/pro/agency),
 default system settings.
 
 Runs either:
@@ -91,9 +91,9 @@ SessionLocal = sessionmaker(bind=engine)
 # Feature flags are stored in features_json; price is a single cents value.
 PLAN_DEFS = [
     {
-        "name": "free",
-        "stripe_price_id": _env_or_none("STRIPE_FREE_PRICE_ID"),
-        "video_limit_monthly": 4,
+        "name": "starter",
+        "stripe_price_id": _env_or_none("STRIPE_STARTER_PRICE_ID"),
+        "video_limit_monthly": 3,
         "storage_limit_gb": 1,
         "motion_credits_monthly": 0,
         "features_json": ["watermark"],
@@ -101,39 +101,53 @@ PLAN_DEFS = [
         "is_active": True,
     },
     {
-        "name": "scheduler",
-        "stripe_price_id": _env_or_none("STRIPE_SCHEDULER_PRICE_ID"),
-        "video_limit_monthly": 13,  # ~3/week
+        "name": "creator",
+        "stripe_price_id": _env_or_none("STRIPE_CREATOR_PRICE_ID"),
+        "video_limit_monthly": 25,
         "storage_limit_gb": 10,
-        "motion_credits_monthly": 27,
+        "motion_credits_monthly": 50,
         "features_json": ["no_watermark", "auto_publish", "hd", "background_music"],
-        "price_cents": 1500,
+        "price_cents": 1900,
         "is_active": True,
     },
     {
-        "name": "committed",
-        "stripe_price_id": _env_or_none("STRIPE_COMMITTED_PRICE_ID"),
-        "video_limit_monthly": 30,  # once/day
-        "storage_limit_gb": 50,
-        "motion_credits_monthly": 62,
-        "features_json": ["no_watermark", "auto_publish", "hd", "background_music", "voice_cloning"],
-        "price_cents": 3000,
-        "is_active": True,
-    },
-    {
-        "name": "intense",
-        "stripe_price_id": _env_or_none("STRIPE_INTENSE_PRICE_ID"),
-        "video_limit_monthly": 62,  # twice/day
-        "storage_limit_gb": 200,
-        "motion_credits_monthly": 124,
+        "name": "pro",
+        "stripe_price_id": _env_or_none("STRIPE_PRO_PRICE_ID"),
+        "video_limit_monthly": 100,
+        "storage_limit_gb": 100,
+        "motion_credits_monthly": 200,
         "features_json": [
             "no_watermark", "auto_publish", "hd", "background_music",
             "voice_cloning", "priority_queue",
         ],
-        "price_cents": 5500,
+        "price_cents": 4900,
+        "is_active": True,
+    },
+    {
+        "name": "agency",
+        "stripe_price_id": _env_or_none("STRIPE_AGENCY_PRICE_ID"),
+        "video_limit_monthly": 500,
+        "storage_limit_gb": 500,
+        "motion_credits_monthly": 1000,
+        "features_json": [
+            "no_watermark", "auto_publish", "hd", "background_music",
+            "voice_cloning", "priority_queue", "white_label", "api_access",
+        ],
+        "price_cents": 14900,
         "is_active": True,
     },
 ]
+
+
+# Tolerate rows created by earlier seeds/migrations under the old tier names.
+# Renaming in place (rather than inserting new rows) keeps plan IDs stable so
+# existing subscriptions keep pointing at the correct tier.
+PLAN_RENAMES = {
+    "free": "starter",
+    "scheduler": "creator",
+    "committed": "pro",
+    "intense": "agency",
+}
 
 
 SETTING_DEFAULTS = [
@@ -150,6 +164,13 @@ SETTING_DEFAULTS = [
 def seed_plans(db):
     for p in PLAN_DEFS:
         existing = db.query(Plan).filter(Plan.name == p["name"]).first()
+        if not existing:
+            old_name = next((o for o, n in PLAN_RENAMES.items() if n == p["name"]), None)
+            if old_name:
+                existing = db.query(Plan).filter(Plan.name == old_name).first()
+                if existing:
+                    existing.name = p["name"]
+                    print(f"  [RENAME] plan: {old_name} -> {p['name']}")
         if existing:
             for k, v in p.items():
                 setattr(existing, k, v)

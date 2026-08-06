@@ -36,7 +36,7 @@ class Subscription(Base):
 
     @property
     def plan_name(self) -> str:
-        """Return the active plan name (e.g. 'free', 'intense')."""
+        """Return the active plan name (e.g. 'starter', 'pro')."""
         if self.plan_rel is not None:
             return self.plan_rel.name
-        return "free"
+        return "starter"

@@ -49,8 +49,14 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_starter_price_id: str = ""
     stripe_creator_price_id: str = ""
     stripe_pro_price_id: str = ""
+    stripe_agency_price_id: str = ""
+    # Add-on one-time payment price IDs (used by /billing/checkout/addon)
+    stripe_addon_motion_price_id: str = ""
+    stripe_addon_voice_cloning_price_id: str = ""
+    stripe_addon_brand_kit_price_id: str = ""
 
     # YouTube
     youtube_client_id: str = ""

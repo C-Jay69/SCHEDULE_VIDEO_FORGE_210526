@@ -19,10 +19,10 @@ interface AdminUser {
 }
 
 const planColors: Record<string, string> = {
-  free: "bg-gray-100 text-gray-600",
-  scheduler: "bg-blue-100 text-blue-700",
-  committed: "bg-violet-100 text-violet-700",
-  intense: "bg-purple-100 text-purple-700",
+  starter: "bg-gray-100 text-gray-600",
+  creator: "bg-blue-100 text-blue-700",
+  pro: "bg-violet-100 text-violet-700",
+  agency: "bg-purple-100 text-purple-700",
 }
 
 export default function AdminUsersPage() {

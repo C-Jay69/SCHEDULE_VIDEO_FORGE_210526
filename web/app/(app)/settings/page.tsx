@@ -18,10 +18,18 @@ declare global {
 }
 
 const planLabels: Record<string, { label: string; color: string }> = {
-  free: { label: "Free", color: "bg-gray-100 text-gray-700" },
-  scheduler: { label: "Scheduler — $15/mo", color: "bg-blue-100 text-blue-700" },
-  committed: { label: "Committed — $30/mo", color: "bg-violet-100 text-violet-700" },
-  intense: { label: "Intense — $55/mo", color: "bg-purple-100 text-purple-700" },
+  starter: { label: "Starter — Free", color: "bg-gray-100 text-gray-700" },
+  creator: { label: "Creator — $19/mo", color: "bg-blue-100 text-blue-700" },
+  pro: { label: "Pro — $49/mo", color: "bg-violet-100 text-violet-700" },
+  agency: { label: "Agency — $149/mo", color: "bg-purple-100 text-purple-700" },
+}
+
+type Addon = { key: string; label: string; price_cents: number }
+type Grant = {
+  product_key: string
+  quantity: number
+  created_at: string
+  expires_at: string | null
 }
 
 export default function SettingsPage() {
@@ -30,7 +38,7 @@ export default function SettingsPage() {
     name: user?.name || "",
     email: user?.email || "",
   })
-  const [planName, setPlanName] = useState("free")
+  const [planName, setPlanName] = useState("starter")
   const [passwordForm, setPasswordForm] = useState({
     current_password: "",
     new_password: "",
@@ -43,6 +51,20 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState("")
   const [passwordError, setPasswordError] = useState("")
   const [billingLoading, setBillingLoading] = useState(false)
+  const [addons, setAddons] = useState<Addon[]>([])
+  const [grants, setGrants] = useState<Grant[]>([])
+  const [buyingKey, setBuyingKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .get<Addon[]>("/billing/addons")
+      .then(setAddons)
+      .catch(() => setAddons([]))
+    api
+      .get<Grant[]>("/billing/addon-grants")
+      .then(setGrants)
+      .catch(() => setGrants([]))
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -109,8 +131,23 @@ export default function SettingsPage() {
     }
   }
 
-  const planKey = planName || "free"
-  const plan = planLabels[planKey] || planLabels.free
+  async function buyAddon(key: string) {
+    setBuyingKey(key)
+    try {
+      const { checkout_url } = await api.post<{ checkout_url: string }>("/billing/checkout/addon", {
+        product_key: key,
+        quantity: 1,
+      })
+      window.location.href = checkout_url
+    } catch (err: any) {
+      alert(err.message || "Failed to start checkout")
+    } finally {
+      setBuyingKey(null)
+    }
+  }
+
+  const planKey = planName || "starter"
+  const plan = planLabels[planKey] || planLabels.starter
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -218,12 +255,66 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={openBillingPortal} disabled={billingLoading}>
               {billingLoading ? "Opening…" : "Manage Billing"}
             </Button>
-            {planKey === "free" && (
+            {planKey === "starter" && (
               <Button asChild>
                 <a href="/pricing">Upgrade Plan</a>
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Add-ons */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Add-ons</CardTitle>
+          <CardDescription>
+            One-time purchases — extra AI-visual credits, voice cloning packs, and brand kit
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {addons.length === 0 ? (
+            <p className="text-sm text-gray-400">
+              No add-ons available yet. Configure their prices in Stripe to enable them.
+            </p>
+          ) : (
+            addons.map((a) => {
+              const owned = grants.find((g) => g.product_key === a.key)
+              return (
+                <div
+                  key={a.key}
+                  className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{a.label}</p>
+                    {owned ? (
+                      <p className="text-xs text-green-600 mt-0.5">
+                        Owned — {owned.quantity} {owned.quantity === 1 ? "unit" : "units"}
+                        {owned.expires_at
+                          ? ` · expires ${new Date(owned.expires_at).toLocaleDateString()}`
+                          : ""}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-0.5">One-time payment</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-semibold text-gray-900">
+                      ${(a.price_cents / 100).toFixed(0)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => buyAddon(a.key)}
+                      disabled={buyingKey !== null}
+                    >
+                      {buyingKey === a.key ? "Opening…" : owned ? "Buy More" : "Buy"}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </CardContent>
       </Card>
     </div>

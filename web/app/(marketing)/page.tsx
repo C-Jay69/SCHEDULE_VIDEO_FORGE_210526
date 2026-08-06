@@ -87,9 +87,9 @@ export default function HomePage() {
           <p className="text-gray-400 mb-10">Start free, scale when you need to.</p>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { name: "Free", price: "$0", features: ["3 videos/month", "Watermarked", "Download only"], highlight: false },
+              { name: "Starter", price: "$0", features: ["3 videos/month", "Watermarked", "Download only"], highlight: false },
               { name: "Creator", price: "$19/mo", features: ["25 videos/month", "No watermark", "YouTube auto-publish", "10GB storage"], highlight: true },
-              { name: "Pro", price: "$49/mo", features: ["Unlimited videos", "All features", "Priority queue", "50GB storage"], highlight: false },
+              { name: "Pro", price: "$49/mo", features: ["100 videos/month", "Voice cloning", "Priority queue", "100GB storage"], highlight: false },
             ].map(({ name, price, features, highlight }) => (
               <div key={name} className={`rounded-xl p-6 border ${highlight ? "border-purple-500 bg-purple-900/20" : "border-gray-700 bg-gray-800/30"}`}>
                 <h3 className="text-xl font-bold mb-1">{name}</h3>

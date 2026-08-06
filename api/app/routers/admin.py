@@ -118,7 +118,7 @@ async def list_users(
         )
         video_count = db.query(Video).filter(Video.user_id == u.id).count()
         resp = AdminUserResponse.model_validate(u)
-        resp.subscription_plan = sub.plan_name if sub else "free"
+        resp.subscription_plan = sub.plan_name if sub else "starter"
         resp.video_count = video_count
         result.append(resp)
     return result
@@ -152,7 +152,7 @@ async def update_user(
     )
     video_count = db.query(Video).filter(Video.user_id == user.id).count()
     resp = AdminUserResponse.model_validate(user)
-    resp.subscription_plan = sub.plan_name if sub else "free"
+    resp.subscription_plan = sub.plan_name if sub else "starter"
     resp.video_count = video_count
     return resp
 
@@ -171,7 +171,7 @@ async def get_user_detail(
     )
     video_count = db.query(Video).filter(Video.user_id == user.id).count()
     resp = AdminUserResponse.model_validate(user)
-    resp.subscription_plan = sub.plan_name if sub else "free"
+    resp.subscription_plan = sub.plan_name if sub else "starter"
     resp.video_count = video_count
     return resp
 
@@ -254,10 +254,10 @@ async def retry_job(
     db.commit()
 
     try:
-        from worker.celery_app import celery_app
+        from app.celery_app import celery_app
 
         video = job.video
-        plan = "free"
+        plan = "starter"
         if video and video.user:
             sub = (
                 db.query(Subscription)

@@ -30,15 +30,16 @@ router = APIRouter(prefix="/videos", tags=["videos"])
 def get_user_plan_limit(plan_name: str, db: Session) -> int:
     """Resolve a user's monthly video limit from the Plan table.
 
-    Seeded plan names: free / scheduler / committed / intense. Falls back to
-    the free limit if the plan row (or a legacy name) can't be resolved.
+    Seeded plan names: starter / creator / pro / agency. Falls back to
+    the starter limit if the plan row (or a legacy name) can't be resolved.
     """
     plan = db.query(Plan).filter(Plan.name == plan_name).first()
     if plan:
         return plan.video_limit_monthly
     legacy = {
-        "creator": "scheduler",
-        "pro": "intense",
+        "scheduler": "creator",
+        "committed": "pro",
+        "intense": "agency",
     }
     plan = db.query(Plan).filter(Plan.name == legacy.get(plan_name, plan_name)).first()
     if plan:
@@ -117,7 +118,7 @@ async def generate_video(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = sub.plan_name if sub else "free"
+    plan = sub.plan_name if sub else "starter"
     if current_user.role != UserRole.admin:
         limit = get_user_plan_limit(plan, db)
         count = get_videos_this_month(current_user.id, db)
@@ -145,7 +146,7 @@ async def generate_video(
 
     # Dispatch Celery task
     try:
-        from worker.celery_app import celery_app
+        from app.celery_app import celery_app
 
         task = celery_app.send_task(
             "tasks.video_generation.generate_video",
@@ -161,7 +162,7 @@ async def generate_video(
                     **(data.settings or {}),
                 },
             ],
-            queue="priority" if plan in ("intense", "pro") else "default",
+            queue="priority" if plan in ("pro", "agency") else "default",
         )
         job.celery_task_id = task.id
         db.commit()
@@ -259,11 +260,11 @@ async def regenerate_video(
     db.refresh(job)
 
     try:
-        from worker.celery_app import celery_app
+        from app.celery_app import celery_app
 
         task = celery_app.send_task(
             "tasks.video_generation.generate_video",
-            args=[str(video.id), str(job.id), project.topic if project else "", {"plan": "free"}],
+            args=[str(video.id), str(job.id), project.topic if project else "", {"plan": "starter"}],
         )
         job.celery_task_id = task.id
         db.commit()
@@ -299,8 +300,8 @@ async def schedule_video(
         .order_by(Subscription.created_at.desc())
         .first()
     )
-    plan = sub.plan_name if sub else "free"
-    if data.platform == "youtube" and plan == "free":
+    plan = sub.plan_name if sub else "starter"
+    if data.platform == "youtube" and plan == "starter":
         raise HTTPException(
             status_code=402,
             detail="YouTube auto-publish requires a paid plan",

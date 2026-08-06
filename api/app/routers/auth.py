@@ -63,13 +63,13 @@ async def register(
     except Exception:
         pass  # Non-fatal, stripe may not be configured
 
-    # Create free subscription — look up the free Plan row to set plan_id
-    free_plan = db.query(Plan).filter(Plan.name == "free").first()
+    # Create free subscription — look up the starter Plan row to set plan_id
+    free_plan = db.query(Plan).filter(Plan.name == "starter").first()
     if free_plan is None:
         # Make registration resilient on an unseeded DB by creating the
         # canonical free plan on the fly.
         free_plan = Plan(
-            name="free",
+            name="starter",
             video_limit_monthly=settings.free_videos_per_month,
             storage_limit_gb=1,
             motion_credits_monthly=0,

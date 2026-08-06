@@ -107,10 +107,10 @@ App is running at:
 1. Create products in Stripe Dashboard matching the plan names.
 2. Add the price IDs to `.env`:
    ```
-   STRIPE_FREE_PRICE_ID=price_xxx
-   STRIPE_SCHEDULER_PRICE_ID=price_xxx
-   STRIPE_COMMITTED_PRICE_ID=price_xxx
-   STRIPE_INTENSE_PRICE_ID=price_xxx
+   STRIPE_STARTER_PRICE_ID=price_xxx
+   STRIPE_CREATOR_PRICE_ID=price_xxx
+   STRIPE_PRO_PRICE_ID=price_xxx
+   STRIPE_AGENCY_PRICE_ID=price_xxx
    ```
 3. Point a Stripe webhook at `https://yourdomain.com/api/webhooks/stripe`
    listening for: `checkout.session.completed`, `customer.subscription.updated`,
@@ -243,7 +243,7 @@ Browser → Next.js (3000) → /api/* proxy → FastAPI (8011)
 
 **Celery queues:**
 
-- `priority` — Intense plan users
+- `priority` — Pro / Agency plan users
 - `default` — everyone else
 
 **Beat tasks:**
@@ -267,7 +267,7 @@ See `.env.example` for the full annotated list. Key variables:
 | `OLLAMA_BASE_URL` | Local LLM endpoint |
 | `MAGIC_HOUR_API_KEY` | AI video visuals (optional) |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe payments |
-| `STRIPE_*_PRICE_ID` | Plan price IDs (free/scheduler/committed/intense) |
+| `STRIPE_*_PRICE_ID` | Plan price IDs (starter/creator/pro/agency) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `S3_BUCKET_NAME` | S3/MinIO |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | YouTube OAuth |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded admin account |
